@@ -91,14 +91,42 @@ s3_client = boto3.client(
     region_name="auto",
 )
 
+# --- CLOUDFLARE R2 SETUP ---
+# We create the client inside a function or ensure it's initialized after load_dotenv()
+def get_r2_client():
+    return boto3.client(
+        service_name='s3',
+        endpoint_url=f"https://{os.getenv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
+        aws_access_key_id=os.getenv('R2_ACCESS_KEY_ID'),
+        aws_secret_access_key=os.getenv('R2_SECRET_ACCESS_KEY'),
+        region_name="auto",
+    )
+
 def upload_to_r2(local_path, file_name):
-    """Uploads file to R2 and returns the public URL"""
-    bucket_name = "gift-app-assets"
+    bucket_name = os.getenv("R2_BUCKET_NAME")
+    public_base_url = os.getenv("R2_PUBLIC_URL")
+    
     try:
-        s3_client.upload_file(local_path, bucket_name, file_name)
-        return f"{os.getenv('R2_PUBLIC_URL')}/{file_name}"
+        client = get_r2_client()
+        
+        # EXPLICIT CONTENT TYPES - This fixes the loading issue
+        if file_name.lower().endswith(".png"):
+            content_type = "image/png"
+        elif file_name.lower().endswith(".glb"):
+            content_type = "model/gltf-binary" # <--- MUST BE THIS
+        else:
+            content_type = "application/octet-stream"
+
+        client.upload_file(
+            local_path, 
+            bucket_name, 
+            file_name,
+            ExtraArgs={'ContentType': content_type}
+        )
+        
+        return f"{public_base_url}/{file_name}"
     except Exception as e:
-        print(f"R2 Upload Error: {e}")
+        print(f"R2 Error: {e}")
         return None
 
 def log_order_to_d1(order_data: dict):
@@ -195,26 +223,34 @@ async def check_status(job_id: str):
             
             if src.exists():
                 # 1. Ask VLM Gatekeeper
-                if analyze_image_with_vlm(src):
-                    # 2. UPLOAD TO CLOUDFLARE R2
+                if analyze_image_with_vlm(str(src)):
+                    # 2. UPLOAD TO R2
                     public_url = upload_to_r2(str(src), fname)
-                    files_to_return.append(public_url)
+                    if public_url:
+                        files_to_return.append(public_url)
                 else:
-                    return {"status": "rejected"}
+                    # If VLM fails, we can either return a rejection or skip
+                    return {"status": "rejected", "message": "VLM Rejection"}
 
     # Check Stage 2
     if '10' in outputs:
         data = outputs['10']
+        # Hunyuan node usually stores output in 'gifs' or 'files'
         items = data.get('gifs', []) + data.get('files', [])
         for item in items:
-            fname = item['filename']
+            fname = item['filename'] # e.g., "mesh/gift_app_0001.glb"
+            
+            # Use root output dir from .env + relative path
             src = Path(os.getenv("COMFY_OUTPUT_DIR")) / fname
+            
             if src.exists():
+                # Extract just the filename for R2 (e.g., gift_app_0001.glb)
                 clean_name = os.path.basename(fname)
-                shutil.copy2(src, dst_dir / clean_name)
-                files_to_return.append(f"/generated/{clean_name}")
-
-    return {"status": "completed", "images": files_to_return}
+                public_url = upload_to_r2(str(src), clean_name)
+                
+                if public_url:
+                    print(f"DEBUG: 3D Model Live at {public_url}")
+                    files_to_return.append(public_url)
 
 @app.post("/api/generate-3d")
 async def generate_3d(payload: ThreeDRequest):

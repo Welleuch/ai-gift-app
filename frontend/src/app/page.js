@@ -84,19 +84,27 @@ export default function Home() {
   };
 
   const pollFor3D = (jobId) => {
+    console.log("Polling for 3D model...");
     const interval = setInterval(async () => {
       try {
         const res = await axios.get(`http://localhost:8000/api/check-status/${jobId}`);
         if (res.data.status === 'completed') {
-          clearInterval(interval);
-          if (res.data.images?.length > 0) {
-             setModelUrl(res.data.images[0]); 
-             setLoading(false);
-             setStatus('Generation Successful');
+          if (res.data.images && res.data.images.length > 0) {
+            const url = res.data.images[0];
+            console.log("3D Model URL Received:", url);
+            
+            if (url.includes('.glb')) {
+               clearInterval(interval);
+               setModelUrl(url);
+               setLoading(false);
+               setStatus('Ready to Print!');
+            }
           }
         }
-      } catch (e) { clearInterval(interval); }
-    }, 2000);
+      } catch (e) {
+        console.error("Polling error:", e);
+      }
+    }, 3000);
   };
 
   return (
