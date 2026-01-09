@@ -55,17 +55,22 @@ export default function Home() {
   };
 
   const pollForImages = (jobId) => {
+    // Increase interval to 3 seconds to give the backend breathing room
     const interval = setInterval(async () => {
       try {
         const res = await axios.get(`http://localhost:8000/api/check-status/${jobId}`);
-        if (res.data.status === 'completed') {
+        
+        if (res.data.status === 'completed' && res.data.images.length > 0) {
+          console.log("SUCCESS: Received images from R2:", res.data.images);
           clearInterval(interval);
           setGeneratedImages(res.data.images);
           setLoading(false);
           setStatus('');
         }
-      } catch (e) { clearInterval(interval); }
-    }, 2000);
+      } catch (e) {
+        console.error("Polling error:", e);
+      }
+    }, 3000); 
   };
 
   const handleSelectImage = async (imgUrl) => {

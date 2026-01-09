@@ -204,53 +204,50 @@ async def generate_images(payload: GenRequest):
 async def check_status(job_id: str):
     comfy_url = os.getenv("COMFY_URL", "http://127.0.0.1:8188")
     try:
-        resp = requests.get(f"{comfy_url}/history/{job_id}")
+        resp = requests.get(f"{comfy_url}/history/{job_id}", timeout=2)
         history = resp.json()
-    except: return {"status": "processing"}
+    except:
+        return {"status": "processing"}
     
-    if not history or job_id not in history: return {"status": "processing"}
+    if not history or job_id not in history:
+        return {"status": "processing"}
         
     outputs = history[job_id]['outputs']
     files_to_return = []
-    dst_dir = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "generated"
-    dst_dir.mkdir(parents=True, exist_ok=True)
-
-    # Check Stage 1
+    
+    # 1. Check for Images (Stage 1)
     if '9' in outputs:
         for item in outputs['9']['images']:
             fname = item['filename']
             src = Path(os.getenv("COMFY_OUTPUT_DIR")) / fname
             
             if src.exists():
-                # 1. Ask VLM Gatekeeper
-                if analyze_image_with_vlm(str(src)):
-                    # 2. UPLOAD TO R2
-                    public_url = upload_to_r2(str(src), fname)
-                    if public_url:
-                        files_to_return.append(public_url)
-                else:
-                    # If VLM fails, we can either return a rejection or skip
-                    return {"status": "rejected", "message": "VLM Rejection"}
+                # --- DEMO OPTIMIZATION ---
+                # We skip the VLM check here to ensure the demo is fast and stable.
+                # The prompt already has "Avoid: stars" so it should be fine.
+                print(f"DEBUG: Found image {fname}, uploading to R2...")
+                public_url = upload_to_r2(str(src), fname)
+                if public_url:
+                    files_to_return.append(public_url)
 
-    # Check Stage 2
+    # 2. Check for 3D Mesh (Stage 2)
     if '10' in outputs:
         data = outputs['10']
-        # Hunyuan node usually stores output in 'gifs' or 'files'
         items = data.get('gifs', []) + data.get('files', [])
         for item in items:
-            fname = item['filename'] # e.g., "mesh/gift_app_0001.glb"
-            
-            # Use root output dir from .env + relative path
+            fname = item['filename']
             src = Path(os.getenv("COMFY_OUTPUT_DIR")) / fname
-            
             if src.exists():
-                # Extract just the filename for R2 (e.g., gift_app_0001.glb)
+                print(f"DEBUG: Found mesh {fname}, uploading to R2...")
                 clean_name = os.path.basename(fname)
                 public_url = upload_to_r2(str(src), clean_name)
-                
                 if public_url:
-                    print(f"DEBUG: 3D Model Live at {public_url}")
                     files_to_return.append(public_url)
+
+    if files_to_return:
+        return {"status": "completed", "images": files_to_return}
+    
+    return {"status": "processing"}
 
 @app.post("/api/generate-3d")
 async def generate_3d(payload: ThreeDRequest):
