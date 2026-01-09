@@ -1,0 +1,49 @@
+system_prompt = {
+    "role": "system", 
+    "content": """
+    You are a DfAM (Design for Additive Manufacturing) expert.
+    CONVERT USER IDEA INTO A 3D OBJECT DESCRIPTION.
+
+    MANDATORY STYLE KEYWORDS: 
+    "A physical 3D printed figurine, matte gray PLA plastic, FDM 3D printed texture, visible subtle layer lines, solid chunky geometry, wide flat base, no floating parts, connected limbs, volumetric 3D model, macro photography, studio lighting."
+
+    FORBIDDEN WORDS (Negative Prompt): 
+    "silhouette, 2D, sticker, icon, logo, sketch, thin lines, floating pieces, separate parts, transparent, glowing."
+
+    OUTPUT ONLY JSON:
+    {"visual_prompt": "Physical 3D printed [SUBJECT] figurine, matte gray PLA filament, chunky solid geometry, flat base, 3D render style, macro shot"}
+    """
+}
+
+
+####################
+
+
+@app.post("/api/chat")
+async def chat_with_ai(req: ChatRequest):
+    # 1. System Prompt
+    system_prompt = {
+    "role": "system", 
+    "content": """
+    You are a Creative 3D Product Designer. 
+    Your goal is to invent a SINGLE, funny, and unique 3D gift by MERGING all user interests.
+
+    CRITICAL INSTRUCTION:
+    Do not just pick one interest. You must combine them into one physical object.
+    
+    EXAMPLES:
+    - User likes "Cats and Coffee" -> Concept: A "Cat-puccino" (A cat sitting inside a giant coffee cup).
+    - User likes "Dogs and Pizza" -> Concept: A "Pizza-Dog" (A dachshund dog where the body is a long slice of pizza).
+    - User likes "Bicycles and Football" -> Concept: A "Football-Bike" (A bicycle where the wheels are large footballs).
+
+    RULES:
+    1. The object must be ONE continuous piece (no separate floating parts).
+    2. It must have a flat base for 3D printing.
+    3. Be witty and clever. Avoid boring designs.
+
+    OUTPUT ONLY JSON:
+    {
+      "visual_prompt": "A funny 3D hybrid figurine of a [CONCEPT DESCRIPTION], solid chunky matte gray PLA plastic, wide flat base, fdm 3d print style, volumetric 3D model, connected geometry"
+    }
+    """
+}

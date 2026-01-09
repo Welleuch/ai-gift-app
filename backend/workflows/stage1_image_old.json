@@ -1,0 +1,133 @@
+{
+  "9": {
+    "inputs": {
+      "filename_prefix": "gift_app",
+      "images": [
+        "34:8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "41": {
+    "inputs": {},
+    "class_type": "ConditioningConcat",
+    "_meta": {
+      "title": "Conditioning (Concat)"
+    }
+  },
+  "34:29": {
+    "inputs": {
+      "vae_name": "ae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "34:8": {
+    "inputs": {
+      "samples": [
+        "34:3",
+        0
+      ],
+      "vae": [
+        "34:29",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "34:37": {
+    "inputs": {
+      "unet_name": "z_image_turbo-Q8_0.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "Unet Loader (GGUF)"
+    }
+  },
+  "34:30": {
+    "inputs": {
+      "clip_name": "qwen_3_4b.safetensors",
+      "type": "lumina2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "34:13": {
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "EmptySD3LatentImage"
+    }
+  },
+  "34:3": {
+    "inputs": {
+      "seed": 774927044443594,
+      "steps": 3,
+      "cfg": 1,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "34:37",
+        0
+      ],
+      "positive": [
+        "34:27",
+        0
+      ],
+      "negative": [
+        "34:33",
+        0
+      ],
+      "latent_image": [
+        "34:13",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "34:33": {
+    "inputs": {
+      "conditioning": [
+        "34:27",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "34:27": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "34:30",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  }
+}

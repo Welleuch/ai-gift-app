@@ -1,0 +1,224 @@
+{
+  "1": {
+    "inputs": {
+      "ckpt_name": "hunyuan_3d_v2.1.safetensors"
+    },
+    "class_type": "ImageOnlyCheckpointLoader",
+    "_meta": {
+      "title": "Image Only Checkpoint Loader (img2vid model)"
+    }
+  },
+  "2": {
+    "inputs": {
+      "image": "gift_app_00024_.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "3": {
+    "inputs": {
+      "shift": 1,
+      "model": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSamplingAuraFlow"
+    }
+  },
+  "4": {
+    "inputs": {
+      "resolution": 2048,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentHunyuan3Dv2",
+    "_meta": {
+      "title": "EmptyLatentHunyuan3Dv2"
+    }
+  },
+  "6": {
+    "inputs": {
+      "clip_vision_output": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "Hunyuan3Dv2Conditioning",
+    "_meta": {
+      "title": "Hunyuan3Dv2Conditioning"
+    }
+  },
+  "7": {
+    "inputs": {
+      "seed": 681228233974399,
+      "steps": 30,
+      "cfg": 3,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "3",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "6",
+        1
+      ],
+      "latent_image": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "8": {
+    "inputs": {
+      "num_chunks": 8000,
+      "octree_resolution": 512,
+      "samples": [
+        "7",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "VAEDecodeHunyuan3D",
+    "_meta": {
+      "title": "VAEDecodeHunyuan3D"
+    }
+  },
+  "9": {
+    "inputs": {
+      "algorithm": "surface net",
+      "threshold": 0.5,
+      "voxel": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "VoxelToMesh",
+    "_meta": {
+      "title": "VoxelToMesh"
+    }
+  },
+  "10": {
+    "inputs": {
+      "filename_prefix": "mesh/ComfyUI",
+      "image": "",
+      "mesh": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "SaveGLB",
+    "_meta": {
+      "title": "SaveGLB"
+    }
+  },
+  "13": {
+    "inputs": {
+      "crop": "center",
+      "clip_vision": [
+        "1",
+        1
+      ],
+      "image": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "CLIPVisionEncode",
+    "_meta": {
+      "title": "CLIP Vision Encode"
+    }
+  },
+  "14": {
+    "inputs": {
+      "model": "BiRefNet-general-epoch_244.pth"
+    },
+    "class_type": "LayerMask: LoadBiRefNetModel",
+    "_meta": {
+      "title": "LayerMask: Load BiRefNet Model(Advance)"
+    }
+  },
+  "15": {
+    "inputs": {
+      "detail_method": "VITMatte",
+      "detail_erode": 4,
+      "detail_dilate": 2,
+      "black_point": 0.01,
+      "white_point": 0.99,
+      "process_detail": false,
+      "device": "cuda",
+      "max_megapixels": 2,
+      "image": [
+        "2",
+        0
+      ],
+      "birefnet_model": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "LayerMask: BiRefNetUltraV2",
+    "_meta": {
+      "title": "LayerMask: BiRefNet Ultra V2(Advance)"
+    }
+  },
+  "16": {
+    "inputs": {
+      "RGB_image": [
+        "17",
+        0
+      ],
+      "mask": [
+        "15",
+        1
+      ]
+    },
+    "class_type": "LayerUtility: ImageCombineAlpha",
+    "_meta": {
+      "title": "LayerUtility: ImageCombineAlpha"
+    }
+  },
+  "17": {
+    "inputs": {
+      "fill_background": true,
+      "background_color": "#000000",
+      "RGBA_image": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "LayerUtility: ImageRemoveAlpha",
+    "_meta": {
+      "title": "LayerUtility: ImageRemoveAlpha"
+    }
+  },
+  "18": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}
