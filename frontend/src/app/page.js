@@ -106,7 +106,7 @@ export default function Home() {
         
         if (res.data.status === 'completed') {
           // Look for the first GLB file in the returned images array
-          const glbFile = res.data.images.find(url => url.toLowerCase().endswith('.glb'));
+          const glbFile = res.data.images.find(url => url.toLowerCase().endsWith('.glb'));
           
           if (glbFile) {
             clearInterval(interval);

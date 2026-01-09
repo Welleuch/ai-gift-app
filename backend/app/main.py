@@ -234,23 +234,33 @@ async def check_status(job_id: str):
 
     # --- STAGE 2: 3D MESH (Node 10) ---
     if '10' in outputs:
-        # Search every sub-key (gifs, files, etc) in Node 10
         node_output = outputs['10']
+        # Check every list inside Node 10 (files, gifs, meshes, etc.)
         for key in node_output:
             if isinstance(node_output[key], list):
                 for item in node_output[key]:
                     if 'filename' in item:
-                        fname = item['filename'] # e.g. "mesh/ComfyUI_0001.glb"
-                        src = Path(os.getenv("COMFY_OUTPUT_DIR")) / fname
+                        fname = item['filename']
+                        output_dir = Path(os.getenv("COMFY_OUTPUT_DIR"))
+                        
+                        # PATH FIX: Try multiple possible locations
+                        # 1. Try the exact path ComfyUI gives
+                        src = output_dir / fname
+                        
+                        # 2. If not found, try forcing the 'mesh' subfolder
+                        if not src.exists():
+                            src = output_dir / "mesh" / os.path.basename(fname)
                         
                         if src.exists():
                             clean_name = os.path.basename(fname)
-                            print(f"DEBUG: Found 3D Mesh {clean_name}, uploading...")
-                            # Upload to R2
+                            print(f"DEBUG: Found 3D Mesh at {src}. Uploading to R2...")
+                            
+                            # Upload to Cloudflare R2
                             url = upload_to_r2(str(src), clean_name)
-                            if url: files_to_return.append(url)
+                            if url:
+                                files_to_return.append(url)
                         else:
-                            print(f"DEBUG: 3D file mentioned in history but not found at {src}")
+                            print(f"DEBUG: 3D file NOT found at {output_dir / fname} OR {output_dir / 'mesh' / os.path.basename(fname)}")
 
     if files_to_return:
         return {"status": "completed", "images": files_to_return}
