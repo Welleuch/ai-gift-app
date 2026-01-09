@@ -103,17 +103,18 @@ def get_r2_client():
     )
 
 def upload_to_r2(local_path, file_name):
+    """Uploads file to R2 with correct MIME types for 3D and 2D"""
     bucket_name = os.getenv("R2_BUCKET_NAME")
     public_base_url = os.getenv("R2_PUBLIC_URL")
     
     try:
         client = get_r2_client()
         
-        # EXPLICIT CONTENT TYPES - This fixes the loading issue
+        # CRITICAL: MIME types for browser compatibility
         if file_name.lower().endswith(".png"):
             content_type = "image/png"
         elif file_name.lower().endswith(".glb"):
-            content_type = "model/gltf-binary" # <--- MUST BE THIS
+            content_type = "model/gltf-binary"  # Required for Three.js
         else:
             content_type = "application/octet-stream"
 
@@ -124,9 +125,11 @@ def upload_to_r2(local_path, file_name):
             ExtraArgs={'ContentType': content_type}
         )
         
-        return f"{public_base_url}/{file_name}"
+        url = f"{public_base_url}/{file_name}"
+        print(f"DEBUG: R2 UPLOAD SUCCESS: {url}")
+        return url
     except Exception as e:
-        print(f"R2 Error: {e}")
+        print(f"DEBUG: R2 UPLOAD ERROR: {e}")
         return None
 
 def log_order_to_d1(order_data: dict):
@@ -214,35 +217,40 @@ async def check_status(job_id: str):
         
     outputs = history[job_id]['outputs']
     files_to_return = []
-    
-    # 1. Check for Images (Stage 1)
+    dst_dir = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "generated"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- STAGE 1: IMAGES (Node 9) ---
     if '9' in outputs:
         for item in outputs['9']['images']:
             fname = item['filename']
             src = Path(os.getenv("COMFY_OUTPUT_DIR")) / fname
-            
             if src.exists():
-                # --- DEMO OPTIMIZATION ---
-                # We skip the VLM check here to ensure the demo is fast and stable.
-                # The prompt already has "Avoid: stars" so it should be fine.
-                print(f"DEBUG: Found image {fname}, uploading to R2...")
-                public_url = upload_to_r2(str(src), fname)
-                if public_url:
-                    files_to_return.append(public_url)
+                # For Local dev, we still copy to public
+                shutil.copy2(src, dst_dir / os.path.basename(fname))
+                # For Cloud dev, we upload to R2
+                url = upload_to_r2(str(src), os.path.basename(fname))
+                if url: files_to_return.append(url)
 
-    # 2. Check for 3D Mesh (Stage 2)
+    # --- STAGE 2: 3D MESH (Node 10) ---
     if '10' in outputs:
-        data = outputs['10']
-        items = data.get('gifs', []) + data.get('files', [])
-        for item in items:
-            fname = item['filename']
-            src = Path(os.getenv("COMFY_OUTPUT_DIR")) / fname
-            if src.exists():
-                print(f"DEBUG: Found mesh {fname}, uploading to R2...")
-                clean_name = os.path.basename(fname)
-                public_url = upload_to_r2(str(src), clean_name)
-                if public_url:
-                    files_to_return.append(public_url)
+        # Search every sub-key (gifs, files, etc) in Node 10
+        node_output = outputs['10']
+        for key in node_output:
+            if isinstance(node_output[key], list):
+                for item in node_output[key]:
+                    if 'filename' in item:
+                        fname = item['filename'] # e.g. "mesh/ComfyUI_0001.glb"
+                        src = Path(os.getenv("COMFY_OUTPUT_DIR")) / fname
+                        
+                        if src.exists():
+                            clean_name = os.path.basename(fname)
+                            print(f"DEBUG: Found 3D Mesh {clean_name}, uploading...")
+                            # Upload to R2
+                            url = upload_to_r2(str(src), clean_name)
+                            if url: files_to_return.append(url)
+                        else:
+                            print(f"DEBUG: 3D file mentioned in history but not found at {src}")
 
     if files_to_return:
         return {"status": "completed", "images": files_to_return}

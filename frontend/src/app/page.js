@@ -74,42 +74,52 @@ export default function Home() {
   };
 
   const handleSelectImage = async (imgUrl) => {
-    setModelUrl(null);
-    setStatus('Reconstructing 3D Mesh...');
+    // 1. Reset everything so the UI knows to show the loading screen
+    setModelUrl(null); 
+    setGeneratedImages([]); // Clear the grid to focus on the 3D generation
     setLoading(true);
-    setGeneratedImages([]); 
-    
+    setStatus('Reconstructing 3D Mesh...');
+
     try {
-      const res = await axios.post('http://localhost:8000/api/generate-3d', { image_url: imgUrl });
+      // 2. Trigger the Stage 2 Backend API
+      const res = await axios.post('http://localhost:8000/api/generate-3d', { 
+        image_url: imgUrl 
+      });
+      
+      // 3. Start checking if the 3D file is ready
       pollFor3D(res.data.job_id);
+      
     } catch (e) {
-      setStatus('Error');
+      console.error("3D Generation failed to start:", e);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "I couldn't start the 3D process. Is the backend running?" 
+      }]);
       setLoading(false);
     }
   };
 
   const pollFor3D = (jobId) => {
-    console.log("Polling for 3D model...");
     const interval = setInterval(async () => {
       try {
         const res = await axios.get(`http://localhost:8000/api/check-status/${jobId}`);
+        
         if (res.data.status === 'completed') {
-          if (res.data.images && res.data.images.length > 0) {
-            const url = res.data.images[0];
-            console.log("3D Model URL Received:", url);
-            
-            if (url.includes('.glb')) {
-               clearInterval(interval);
-               setModelUrl(url);
-               setLoading(false);
-               setStatus('Ready to Print!');
-            }
+          // Look for the first GLB file in the returned images array
+          const glbFile = res.data.images.find(url => url.toLowerCase().endswith('.glb'));
+          
+          if (glbFile) {
+            clearInterval(interval);
+            console.log("3D Model Ready:", glbFile);
+            setModelUrl(glbFile); // This triggers the 3D viewer
+            setLoading(false);
+            setStatus('Ready!');
           }
         }
       } catch (e) {
         console.error("Polling error:", e);
       }
-    }, 3000);
+    }, 3000); // Poll every 3 seconds
   };
 
   return (
