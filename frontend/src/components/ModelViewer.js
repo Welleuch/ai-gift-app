@@ -18,41 +18,48 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
         // 1. Process the AI Model
         scene.traverse((child) => {
           if (child.isMesh && child.geometry) {
-            // FIX: We must "un-index" and "de-interleave" the geometry
-            // This converts the complex AI memory into a simple list of triangles
-            let geometry = child.geometry.clone();
-            if (geometry.index) {
-                geometry = geometry.toNonIndexed();
+            // THE ULTIMATE FIX: Rebuild the geometry from scratch
+            // This removes "Interleaved Buffers" which cause the 'count' error
+            const posAttr = child.geometry.attributes.position;
+            if (!posAttr) return;
+
+            const newGeometry = new THREE.BufferGeometry();
+            // Manually copy the vertex positions into a standard Float32Array
+            const vertices = new Float32Array(posAttr.array);
+            newGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+
+            // If the AI model has an index (shortcuts), flatten it
+            if (child.geometry.index) {
+                const index = child.geometry.index.array;
+                newGeometry.setIndex(new THREE.BufferAttribute(new Uint32Array(index), 1));
             }
 
-            const meshClone = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
+            const cleanMesh = new THREE.Mesh(newGeometry.toNonIndexed(), new THREE.MeshStandardMaterial());
             
-            // Apply current UI Scale and Position
+            // Apply scale and position from the UI sliders
             const s = pedestalSettings.scale || 1;
-            meshClone.scale.set(s, s, s);
-            meshClone.position.y = (pedestalSettings.offset || 0) / 10;
+            cleanMesh.scale.set(s, s, s);
+            cleanMesh.position.y = (pedestalSettings.offset || 0) / 10;
             
-            meshClone.updateMatrixWorld(true);
-            exportGroup.add(meshClone);
+            cleanMesh.updateMatrixWorld(true);
+            exportGroup.add(cleanMesh);
           }
         });
 
         // 2. Process the Pedestal
         if (pedestalRef.current) {
           const pGeom = pedestalRef.current.geometry.clone();
-          const pClone = new THREE.Mesh(pGeom, new THREE.MeshStandardMaterial());
-          pClone.position.y = -(pedestalSettings.height / 10) / 2;
-          pClone.updateMatrixWorld(true);
-          exportGroup.add(pClone);
+          const pMesh = new THREE.Mesh(pGeom, new THREE.MeshStandardMaterial());
+          pMesh.position.y = -(pedestalSettings.height / 10) / 2;
+          pMesh.updateMatrixWorld(true);
+          exportGroup.add(pMesh);
         }
 
-        // 3. Final Export (Binary mode is much faster and smaller)
-        const result = exporter.parse(exportGroup, { binary: true });
-        console.log("Success: STL Data parsed successfully");
-        return result;
+        // 3. Export as Binary STL
+        return exporter.parse(exportGroup, { binary: true });
 
       } catch (err) {
-        console.error("STLExporter crashed:", err);
+        console.error("STLExporter process failed:", err);
         return null;
       }
     }
@@ -64,7 +71,6 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 
   return (
     <group>
-      {/* Visual Preview */}
       <group position={[0, yOffset, 0]}>
         <Center bottom>
           <primitive object={scene} scale={pedestalSettings.scale} />
@@ -76,9 +82,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
           {pedestalSettings.shape === 'cylinder' ? (
             <cylinderGeometry args={[r, r, h, 64]} />
           ) : (
-            <RoundedBox args={[r * 2, h, r * 2]} radius={0.15} smoothness={4}>
-              <meshStandardMaterial color="#cbd5e1" />
-            </RoundedBox>
+            <RoundedBox args={[r * 2, h, r * 2]} radius={0.1} smoothness={4} />
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
