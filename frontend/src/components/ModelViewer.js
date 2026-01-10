@@ -7,28 +7,46 @@ import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
 const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const { scene } = useGLTF(url);
-  const groupRef = useRef();
+  const pedestalRef = useRef();
 
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
       const exporter = new STLExporter();
-      const cleanScene = new THREE.Scene();
+      const exportGroup = new THREE.Group();
 
-      // 1. Traverse the AI Model and the Pedestal Group
-      // We ONLY add objects that are real Meshes with valid geometry
-      groupRef.current.traverse((child) => {
+      // 1. Process the AI Model
+      // We look for every mesh inside the AI scene and flatten it
+      scene.traverse((child) => {
         if (child.isMesh && child.geometry) {
-          // We create a temporary copy to maintain world position/scale
-          const clone = child.clone();
-          child.getWorldPosition(clone.position);
-          child.getWorldQuaternion(clone.quaternion);
-          child.getWorldScale(clone.scale);
-          cleanScene.add(clone);
+          const meshClone = new THREE.Mesh(child.geometry.clone(), child.material.clone());
+          
+          // Apply current UI Scale
+          meshClone.scale.set(
+            pedestalSettings.scale, 
+            pedestalSettings.scale, 
+            pedestalSettings.scale
+          );
+
+          // Apply current UI Position (Offset)
+          // We divide by 10 to match Three.js units
+          meshClone.position.y = pedestalSettings.offset / 10;
+          
+          meshClone.updateMatrixWorld();
+          exportGroup.add(meshClone);
         }
       });
 
-      // 2. Export the clean scene (No text, no lights, no helpers)
-      return exporter.parse(cleanScene, { binary: true });
+      // 2. Process the Pedestal
+      if (pedestalRef.current) {
+        const pClone = pedestalRef.current.clone();
+        // Calculate pedestal Y position (it is centered at -h/2)
+        pClone.position.y = -(pedestalSettings.height / 10) / 2;
+        pClone.updateMatrixWorld();
+        exportGroup.add(pClone);
+      }
+
+      // 3. Parse the clean group
+      return exporter.parse(exportGroup, { binary: true });
     }
   }));
 
@@ -37,26 +55,27 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const yOffset = pedestalSettings.offset / 10;
 
   return (
-    <group ref={groupRef}>
-      {/* 1. THE AI MODEL */}
+    <group>
+      {/* Visual Model for Screen */}
       <group position={[0, yOffset, 0]}>
         <Center bottom>
           <primitive object={scene} scale={pedestalSettings.scale} />
         </Center>
       </group>
 
-      {/* 2. THE PEDESTAL */}
+      {/* Visual Pedestal for Screen */}
       <group position={[0, -h / 2, 0]}>
-        <mesh receiveShadow>
+        <mesh ref={pedestalRef}>
           {pedestalSettings.shape === 'cylinder' ? (
             <cylinderGeometry args={[r, r, h, 64]} />
           ) : (
-            <RoundedBox args={[r * 2, h, r * 2]} radius={0.1} smoothness={4} />
+            <RoundedBox args={[r * 2, h, r * 2]} radius={0.1} smoothness={4}>
+              <meshStandardMaterial color="#cbd5e1" />
+            </RoundedBox>
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
 
-        {/* 3. THE TEXT (Visual only - ignored by exporter) */}
         <Text
           position={[0, 0, r + 0.05]}
           fontSize={h * 0.4}

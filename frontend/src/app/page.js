@@ -110,15 +110,17 @@ export default function Home() {
       try {
         const res = await axios.get(`http://localhost:8000/api/check-status/${jobId}`);
         if (res.data.status === 'completed') {
+          // Look for the GLB file
           const glbFile = res.data.images.find(url => url.toLowerCase().endsWith('.glb'));
           if (glbFile) {
+            console.log("3D Model URL:", glbFile);
             clearInterval(interval);
-            setModelUrl(glbFile); 
+            setModelUrl(glbFile); // This updates the viewer
             setLoading(false);
-            setStatus('Ready!');
+            setStatus('Ready to Customize!');
           }
         }
-      } catch (e) { clearInterval(interval); }
+      } catch (e) { console.error(e); }
     }, 3000);
   };
 
