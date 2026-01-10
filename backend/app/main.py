@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from typing import List, Dict
 from dotenv import load_dotenv
 import boto3
+import re
 
 load_dotenv()
 app = FastAPI()
@@ -138,43 +139,44 @@ async def generate_3d(payload: ThreeDRequest):
 @app.post("/api/slice")
 async def slice_model(file: UploadFile = File(...)):
     try:
-        # Create a unique filename to avoid conflicts
         job_id = str(random.randint(1000, 9999))
         temp_stl = Path(f"temp_{job_id}.stl")
         output_gcode = f"gift_{job_id}.gcode"
 
-        # 1. Save the STL
         with open(temp_stl, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
-        # Verify file size
-        if temp_stl.stat().st_size < 100:
-            return {"status": "error", "message": "STL file is empty or corrupt."}
 
-        # 2. Run PrusaSlicer
         config_path = Path(__file__).resolve().parent.parent / "config.ini"
-        command = [
-            PRUSA_PATH,
-            "--export-gcode",
-            "--load", str(config_path),
-            "--output", output_gcode,
-            str(temp_stl)
-        ]
+        command = [PRUSA_PATH, "--export-gcode", "--load", str(config_path), "--output", output_gcode, str(temp_stl)]
         
-        print(f"DEBUG: Running slicer for job {job_id}...")
-        result = subprocess.run(command, capture_output=True, text=True)
+        subprocess.run(command, check=True)
 
-        if result.returncode != 0:
-            print(f"Slicer Error: {result.stderr}")
-            return {"status": "error", "message": "Slicer failed to process the geometry."}
+        # --- NEW: EXTRACT METADATA ---
+        weight_g = 0.0
+        print_time = "Unknown"
+        
+        with open(output_gcode, "r") as f:
+            content = f.read()
+            # PrusaSlicer format: "; filament used [g] = 12.34"
+            weight_match = re.search(r"filament used \[g\] = ([\d\.]+)", content)
+            time_match = re.search(r"estimated printing time \(normal mode\) = (.*)", content)
+            
+            if weight_match: weight_g = float(weight_match.group(1))
+            if time_match: print_time = time_match.group(1).strip()
 
-        # 3. Upload to R2
+        # Upload G-Code to R2
         gcode_url = upload_to_r2(output_gcode, output_gcode)
         
-        # Clean up temp files
-        if temp_stl.exists(): temp_stl.unlink()
+        # Calculate Price
+        material_cost = weight_g * 0.03 # 0.03€ per gram
+        total_price = material_cost + 5 + 7 # Base fee + Profit
         
-        return {"status": "success", "gcode_url": gcode_url}
+        return {
+            "status": "success",
+            "gcode_url": gcode_url,
+            "weight": weight_g,
+            "print_time": print_time,
+            "price": round(total_price, 2)
+        }
     except Exception as e:
-        print(traceback.format_exc())
         return {"status": "error", "message": str(e)}

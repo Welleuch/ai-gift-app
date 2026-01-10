@@ -19,6 +19,9 @@ const ModelViewer = dynamic(() => import('../components/ModelViewer'), {
   )
 });
 
+const [orderSummary, setOrderSummary] = useState(null);
+const [isOrdered, setIsOrdered] = useState(false);
+
 export default function Home() {
   // --- STATE ---
   const [messages, setMessages] = useState([
@@ -127,35 +130,24 @@ export default function Home() {
   // --- NEW: SLICING HANDLER ---
   const handlePrepareGCode = async () => {
     if (!exporterRef.current) return;
-    setStatus('Converting 3D Data...');
+    setStatus('Calculating Manufacturing Costs...');
     setLoading(true);
 
     try {
-      // 1. Run the exporter
       const stlData = exporterRef.current.exportSTL();
-      
-      if (!stlData) {
-        throw new Error("Exporter failed to generate data.");
-      }
-
-      // 2. Create the File
       const blob = new Blob([stlData], { type: 'application/octet-stream' });
       const formData = new FormData();
       formData.append('file', blob, 'gift.stl');
 
-      // 3. Send to Backend
-      setStatus('Slicing on local server...');
       const res = await axios.post('http://localhost:8000/api/slice', formData);
       
-      if (res.data.gcode_url) {
-        window.location.href = res.data.gcode_url;
-        setStatus('G-Code Ready!');
-      } else {
-        alert("Slicer Error: " + res.data.message);
+      if (res.data.status === 'success') {
+        // INSTEAD OF REDIRECTING: Show the summary
+        setOrderSummary(res.data);
+        setStatus('Price Calculated');
       }
     } catch (e) {
-      console.error(e);
-      setStatus('Error. Check Console.');
+      setStatus('Calculation failed');
     }
     setLoading(false);
   };
@@ -266,6 +258,65 @@ export default function Home() {
               </div>
             </div>
           )}
+{orderSummary && !isOrdered && (
+  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-6">
+    <div className="bg-white rounded-[40px] w-full max-w-lg p-10 shadow-2xl animate-in zoom-in-95 duration-300">
+      <h2 className="text-3xl font-black text-slate-800 mb-2 text-center text-blue-600">Order Summary</h2>
+      <p className="text-slate-400 text-center mb-8 font-bold uppercase tracking-widest text-xs">Ready for Manufacturing</p>
+      
+      <div className="space-y-4 mb-8">
+        <div className="flex justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+          <span className="text-slate-500 font-bold">Estimated Print Time</span>
+          <span className="text-slate-800 font-black">{orderSummary.print_time}</span>
+        </div>
+        <div className="flex justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+          <span className="text-slate-500 font-bold">Material Weight (PLA)</span>
+          <span className="text-slate-800 font-black">{orderSummary.weight}g</span>
+        </div>
+        <div className="border-t border-dashed my-4 pt-4">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-slate-400">Packaging & Prep</span>
+            <span className="text-slate-600 font-bold">5.00€</span>
+          </div>
+          <div className="flex justify-between text-xl font-black text-slate-900">
+            <span>Total Price</span>
+            <span className="text-blue-600">{orderSummary.price}€</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <button 
+          onClick={() => setOrderSummary(null)}
+          className="flex-1 py-4 rounded-2xl font-bold text-slate-400 hover:bg-slate-50 transition-colors"
+        >
+          CANCEL
+        </button>
+        <button 
+          onClick={() => setIsOrdered(true)}
+          className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all"
+        >
+          PAY & SHIP 🚀
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{isOrdered && (
+  <div className="absolute inset-0 bg-white z-[110] flex items-center justify-center text-center p-12 animate-in fade-in duration-500">
+    <div className="max-w-md">
+      <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8">
+        <CheckCircle2 size={48} />
+      </div>
+      <h2 className="text-4xl font-black text-slate-900 mb-4 tracking-tighter">Order Sent!</h2>
+      <p className="text-slate-500 leading-relaxed font-medium mb-8">
+        The G-Code for your <strong>{pedestalSettings.text || 'Custom Gift'}</strong> has been sent to our production partner. You'll receive an email when the print starts.
+      </p>
+      <button onClick={() => window.location.reload()} className="text-blue-600 font-bold uppercase tracking-widest text-xs border-b-2 border-blue-600 pb-1">Start New Design</button>
+    </div>
+  </div>
+)}
         </main>
       </div>
     </div>
