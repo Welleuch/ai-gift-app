@@ -74,10 +74,10 @@ export default function PedestalControls({ settings, setSettings, onPrepare }) {
         </div>
 
         <button 
-          onClick={onPrepare}
-          className="w-full bg-blue-600 text-white py-5 rounded-[24px] font-black text-sm shadow-xl shadow-blue-200 hover:bg-blue-700 hover:-translate-y-1 active:translate-y-0 transition-all flex items-center justify-center gap-3 mt-4"
+          onClick={() => onPrepare()} // This will trigger the parent close function
+          className="w-full bg-slate-900 text-white py-5 rounded-[24px] font-black text-sm shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-3 mt-4"
         >
-          <CheckCircle2 size={20} /> GENERATE FINAL STL
+          <CheckCircle2 size={20} /> HIDE SETTINGS
         </button>
       </div>
     </div>

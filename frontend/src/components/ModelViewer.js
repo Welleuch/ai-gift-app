@@ -7,13 +7,28 @@ import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
 const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const { scene } = useGLTF(url);
-  const groupRef = useRef();
+  const modelGroupRef = useRef();
+  const pedestalRef = useRef();
 
-  // This allows the parent (Page.js) to call "exportSTL"
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
       const exporter = new STLExporter();
-      return exporter.parse(groupRef.current, { binary: true });
+      const newGroup = new THREE.Group();
+
+      // 1. Clone the AI Model and apply current scale/position
+      if (modelGroupRef.current) {
+        const clonedModel = modelGroupRef.current.clone();
+        newGroup.add(clonedModel);
+      }
+
+      // 2. Clone only the Pedestal Mesh (Ignore the Text)
+      if (pedestalRef.current) {
+        const clonedPedestal = pedestalRef.current.clone();
+        newGroup.add(clonedPedestal);
+      }
+
+      // 3. Export only this clean group
+      return exporter.parse(newGroup, { binary: true });
     }
   }));
 
@@ -22,21 +37,35 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const yOffset = pedestalSettings.offset / 10;
 
   return (
-    <group ref={groupRef}>
-      <Center bottom position={[0, yOffset, 0]}>
-        <primitive object={scene} scale={pedestalSettings.scale} castShadow />
-      </Center>
+    <group>
+      {/* Container for the AI Model */}
+      <group ref={modelGroupRef} position={[0, yOffset, 0]}>
+        <Center bottom>
+          <primitive object={scene} scale={pedestalSettings.scale} castShadow />
+        </Center>
+      </group>
 
+      {/* Container for the Pedestal */}
       <group position={[0, -h / 2, 0]}>
-        <mesh receiveShadow>
+        <mesh ref={pedestalRef} receiveShadow>
           {pedestalSettings.shape === 'cylinder' ? (
             <cylinderGeometry args={[r, r, h, 64]} />
           ) : (
-            <RoundedBox args={[r * 2, h, r * 2]} radius={0.15} smoothness={4} />
+            <RoundedBox args={[r * 2, h, r * 2]} radius={0.15} smoothness={4}>
+              <meshStandardMaterial color="#cbd5e1" />
+            </RoundedBox>
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
-        <Text position={[0, 0, r + 0.05]} fontSize={h * 0.5} color="#1e293b">
+
+        {/* Text is only for visual preview in browser */}
+        <Text
+          position={[0, 0, r + 0.05]}
+          fontSize={h * 0.5}
+          color="#1e293b"
+          anchorX="center"
+          anchorY="middle"
+        >
           {pedestalSettings.text}
         </Text>
       </group>
