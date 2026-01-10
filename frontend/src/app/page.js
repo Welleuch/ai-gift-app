@@ -5,15 +5,22 @@ import axios from 'axios';
 import dynamic from 'next/dynamic';
 import { Send, Loader2, Box, Sparkles, Cpu, Layers, Download, CheckCircle2 } from 'lucide-react';
 
-// Import the new Controls component
+// 1. Import the components
 import PedestalControls from '../components/PedestalControls';
 
+// 2. Setup the 3D Viewer with SSR disabled
 const ModelViewer = dynamic(() => import('../components/ModelViewer'), { 
   ssr: false,
-  loading: () => <div className="flex flex-col items-center gap-4"><Loader2 className="animate-spin text-blue-500" size={40}/> <p className="text-slate-400 animate-pulse">Initializing 3D Engine...</p></div>
+  loading: () => (
+    <div className="flex flex-col items-center gap-4">
+      <Loader2 className="animate-spin text-blue-500" size={40}/> 
+      <p className="text-slate-400 animate-pulse">Initializing 3D Engine...</p>
+    </div>
+  )
 });
 
 export default function Home() {
+  // --- ALL STATE VARIABLES DEFINED HERE ---
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "Welcome to the AI 3D Gift Studio. Tell me about the recipient's hobbies or favorite objects to begin." }
   ]);
@@ -24,16 +31,18 @@ export default function Home() {
   const [status, setStatus] = useState('');
   const scrollRef = useRef(null);
 
-  // --- NEW STATE FOR PEDESTAL ---
+  // PEDESTAL STATE (The part that caused the error)
+  const [showPedestalUI, setShowPedestalUI] = useState(false);
   const [pedestalSettings, setPedestalSettings] = useState({
     shape: 'box',
     height: 10,
     radius: 30,
     text: '',
-    offset: 0, // NEW: vertical position
-    scale: 1.0  // NEW: model size
+    offset: 0,
+    scale: 1.0
   });
 
+  // Auto-scroll chat
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -81,7 +90,7 @@ export default function Home() {
 
   const handleSelectImage = async (imgUrl) => {
     setModelUrl(null);
-    setShowPedestalUI(false); // Reset UI when starting new model
+    setShowPedestalUI(false); 
     setStatus('Reconstructing 3D Mesh...');
     setLoading(true);
     setGeneratedImages([]); 
@@ -113,17 +122,17 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-900">
+    <div className="flex h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-900 tracking-tight">
       
-      {/* SIDEBAR */}
+      {/* LEFT SIDEBAR: CHAT */}
       <div className="w-[400px] bg-slate-900 flex flex-col shadow-2xl z-20">
         <div className="p-6 border-b border-slate-800 flex items-center gap-3">
           <div className="bg-blue-500 p-2 rounded-lg text-white">
             <Sparkles size={20} />
           </div>
           <div>
-            <h1 className="text-white font-bold tracking-tight">GiftAI Studio</h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">3D Generation Engine</p>
+            <h1 className="text-white font-bold text-lg">GiftAI Studio</h1>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-black opacity-50">3D Generation Engine</p>
           </div>
         </div>
 
@@ -132,88 +141,98 @@ export default function Home() {
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`p-4 rounded-2xl max-w-[85%] text-sm leading-relaxed shadow-sm ${
                 m.role === 'user' 
-                ? 'bg-blue-600 text-white' 
+                ? 'bg-blue-600 text-white shadow-blue-900/20' 
                 : 'bg-slate-800 text-slate-200 border border-slate-700'
               }`}>
                 {m.content}
               </div>
             </div>
           ))}
-          {loading && <div className="text-blue-400 text-xs animate-pulse flex items-center gap-2"><Loader2 className="animate-spin" size={12}/> {status}</div>}
+          {loading && (
+            <div className="text-blue-400 text-[10px] font-bold uppercase tracking-widest animate-pulse flex items-center gap-2">
+              <Loader2 className="animate-spin" size={12}/> {status}
+            </div>
+          )}
         </div>
         
-        <div className="p-6 bg-slate-900 border-t border-slate-800 text-white">
+        <div className="p-6 bg-slate-900 border-t border-slate-800">
           <div className="relative group">
             <input 
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-4 pr-12 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3.5 pl-4 pr-12 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-500"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
               placeholder="Describe interests..."
             />
-            <button onClick={sendMessage} className="absolute right-2 top-1.5 p-2 text-slate-400 hover:text-blue-400"><Send size={18} /></button>
+            <button onClick={sendMessage} className="absolute right-2 top-2 p-2 text-slate-400 hover:text-blue-400 transition-colors"><Send size={18} /></button>
           </div>
         </div>
       </div>
 
       {/* MAIN WORKBENCH */}
-      <div className="flex-1 relative flex flex-col overflow-hidden">
+      <div className="flex-1 relative flex flex-col overflow-hidden bg-[#f8fafc]">
         
-        {/* HEADER INDICATORS */}
-        <div className="absolute top-6 left-6 flex gap-4 z-10">
-          <div className="bg-white/80 backdrop-blur px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black text-slate-600 shadow-sm border border-white">
+        {/* INDICATORS */}
+        <div className="absolute top-6 left-6 flex gap-3 z-10">
+          <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black text-slate-600 shadow-sm border border-slate-100">
             <Cpu size={14} className="text-blue-500" /> GPU: ACTIVE
           </div>
-          <div className="bg-white/80 backdrop-blur px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black text-slate-600 shadow-sm border border-white">
+          <div className="bg-white/90 backdrop-blur px-4 py-2 rounded-full flex items-center gap-2 text-[10px] font-black text-slate-600 shadow-sm border border-slate-100">
             <Layers size={14} className="text-green-500" /> DfAM: ENFORCED
           </div>
         </div>
 
-        {/* --- PEDESTAL CONTROLS (FLOATING PANEL) --- */}
+        {/* --- PEDESTAL CONTROLS (CONDITIONAL RENDERING) --- */}
         {showPedestalUI && (
           <PedestalControls 
             settings={pedestalSettings} 
             setSettings={setPedestalSettings} 
-            onPrepare={() => alert("Ready to Export!")}
+            onPrepare={() => alert("Ready to Export STL!")}
           />
         )}
 
         <main className="flex-1 p-12 flex items-center justify-center">
           {!modelUrl && generatedImages.length === 0 && !loading && (
-            <div className="text-center text-slate-300 font-bold uppercase tracking-widest"><Box size={60} className="mx-auto mb-4 opacity-20"/>Design Workbench</div>
+            <div className="text-center">
+              <Box size={80} className="mx-auto mb-6 text-slate-200" />
+              <h2 className="text-slate-400 font-black uppercase tracking-[0.3em] text-sm">Design Workbench</h2>
+            </div>
           )}
 
           {loading && generatedImages.length === 0 && !modelUrl && (
-            <div className="text-center"><Loader2 size={40} className="animate-spin text-blue-500 mx-auto mb-4"/> <h2 className="text-xl font-bold text-slate-700">{status}</h2></div>
+            <div className="text-center">
+              <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+              <h2 className="text-xl font-extrabold text-slate-800">{status}</h2>
+            </div>
           )}
 
           {!modelUrl && generatedImages.length > 0 && (
-            <div className="grid grid-cols-2 gap-8 w-full max-w-5xl">
+            <div className="grid grid-cols-2 gap-10 w-full max-w-5xl animate-in fade-in zoom-in duration-700">
               {generatedImages.map((img, i) => (
-                <div key={i} className="group relative cursor-pointer rounded-3xl overflow-hidden shadow-2xl border-4 border-white transition-all hover:scale-[1.02]" onClick={() => handleSelectImage(img)}>
-                  <img src={img} alt="AI Design" className="w-full h-80 object-cover bg-slate-200" />
-                  <div className="absolute inset-0 bg-blue-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                    <button className="bg-white text-blue-900 px-6 py-2 rounded-xl font-bold">MAKE 3D</button>
+                <div key={i} className="group relative cursor-pointer rounded-[40px] overflow-hidden shadow-2xl border-8 border-white transition-all hover:scale-[1.03] hover:rotate-1" onClick={() => handleSelectImage(img)}>
+                  <img src={img} alt="AI Design" className="w-full h-96 object-cover bg-slate-100" />
+                  <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                    <div className="bg-white text-blue-600 px-8 py-3 rounded-2xl font-black shadow-2xl tracking-tighter">GENERATE 3D MESH</div>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* --- 3D VIEWER WITH PEDESTAL SETTINGS --- */}
+          {/* --- 3D VIEWER --- */}
           {modelUrl && (
-            <div className="w-full h-full flex flex-col gap-6">
-              <div className="flex-1 bg-white rounded-[40px] shadow-2xl overflow-hidden relative border-8 border-white">
+            <div className="w-full h-full flex flex-col gap-6 animate-in fade-in duration-1000">
+              <div className="flex-1 bg-white rounded-[50px] shadow-2xl overflow-hidden relative border-[12px] border-white ring-1 ring-slate-200">
                  <ModelViewer url={modelUrl} pedestalSettings={pedestalSettings} />
                  
-                 <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4">
+                 <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
                    <button 
                      onClick={() => setShowPedestalUI(!showPedestalUI)}
-                     className="bg-slate-900 text-white px-8 py-4 rounded-2xl shadow-xl hover:bg-slate-800 font-bold flex items-center gap-3 transition-transform hover:scale-105"
+                     className={`px-8 py-4 rounded-2xl shadow-2xl font-bold flex items-center gap-3 transition-all ${showPedestalUI ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-900 text-white'}`}
                    >
-                     <Layers size={20}/> {showPedestalUI ? 'CLOSE SETTINGS' : 'CUSTOMIZE PEDESTAL'}
+                     <Layers size={20}/> {showPedestalUI ? 'HIDE SETTINGS' : 'CUSTOMIZE BASE'}
                    </button>
-                   <button className="bg-blue-600 text-white px-8 py-4 rounded-2xl shadow-xl hover:bg-blue-700 font-bold flex items-center gap-3 transition-transform hover:scale-105">
+                   <button className="bg-blue-600 text-white px-8 py-4 rounded-2xl shadow-2xl hover:bg-blue-700 font-bold flex items-center gap-3 transition-transform hover:scale-105 active:scale-95">
                      <Download size={20}/> PREPARE G-CODE
                    </button>
                  </div>
