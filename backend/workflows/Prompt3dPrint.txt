@@ -1,0 +1,18 @@
+# 1. THE PROVEN TEMPLATE (Your Cow/Knitting prompt)
+        user_interests = payload.visual_prompt
+        
+        perfect_template = f"""
+        You are a creative product designer and 3D-printing expert.
+        I want to offer a 3d printed gift made completely with PLA filament of gray color. 
+        The recipient loves: {user_interests}.
+
+        Your task is to:
+        Propose a unique gift idea that is useful, thoughtful, or decorative. 
+
+        Favor designs that:
+        - Print without excessive supports and thin walls
+        - Avoid ideas that require electronics
+        - The final model must be ONE continuous object, with no separate parts, fully connected 3D mesh
+        - Please provide a visual design description suitable for generating a 3D model from the front perspective
+        - Take into consideration that the generated image will make the 3d model respects the rules of Design for Additive Manufacturing (DfAM)
+        """

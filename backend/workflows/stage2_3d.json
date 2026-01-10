@@ -32,7 +32,7 @@
   },
   "4": {
     "inputs": {
-      "resolution": 2048,
+      "resolution": 4096,
       "batch_size": 1
     },
     "class_type": "EmptyLatentHunyuan3Dv2",
@@ -55,8 +55,8 @@
   "7": {
     "inputs": {
       "seed": 681228233974399,
-      "steps": 30,
-      "cfg": 3,
+      "steps": 50,
+      "cfg": 5,
       "sampler_name": "euler",
       "scheduler": "normal",
       "denoise": 1,
