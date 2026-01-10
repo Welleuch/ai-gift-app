@@ -15,38 +15,44 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
         const exporter = new STLExporter();
         const exportGroup = new THREE.Group();
 
-        // 1. Process the AI Model with EXTREME caution
+        // 1. Process the AI Model
         scene.traverse((child) => {
-          // Check if it's a mesh and HAS triangular geometry
-          if (child.isMesh && child.geometry && child.geometry.attributes.position) {
-            const clone = new THREE.Mesh(child.geometry.clone(), new THREE.MeshBasicMaterial());
+          if (child.isMesh && child.geometry) {
+            // FIX: We must "un-index" and "de-interleave" the geometry
+            // This converts the complex AI memory into a simple list of triangles
+            let geometry = child.geometry.clone();
+            if (geometry.index) {
+                geometry = geometry.toNonIndexed();
+            }
+
+            const meshClone = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
             
-            // Apply the user's scale and vertical offset
+            // Apply current UI Scale and Position
             const s = pedestalSettings.scale || 1;
-            clone.scale.set(s, s, s);
-            clone.position.y = (pedestalSettings.offset || 0) / 10;
+            meshClone.scale.set(s, s, s);
+            meshClone.position.y = (pedestalSettings.offset || 0) / 10;
             
-            clone.updateMatrixWorld(true);
-            exportGroup.add(clone);
-            console.log("Exporter: Added AI Mesh component successfully");
+            meshClone.updateMatrixWorld(true);
+            exportGroup.add(meshClone);
           }
         });
 
         // 2. Process the Pedestal
         if (pedestalRef.current) {
-          const pClone = new THREE.Mesh(pedestalRef.current.geometry.clone(), new THREE.MeshBasicMaterial());
-          // Match the visual position of the pedestal
+          const pGeom = pedestalRef.current.geometry.clone();
+          const pClone = new THREE.Mesh(pGeom, new THREE.MeshStandardMaterial());
           pClone.position.y = -(pedestalSettings.height / 10) / 2;
           pClone.updateMatrixWorld(true);
           exportGroup.add(pClone);
-          console.log("Exporter: Added Pedestal Mesh successfully");
         }
 
-        // 3. Final Export
-        return exporter.parse(exportGroup, { binary: true });
+        // 3. Final Export (Binary mode is much faster and smaller)
+        const result = exporter.parse(exportGroup, { binary: true });
+        console.log("Success: STL Data parsed successfully");
+        return result;
+
       } catch (err) {
-        console.error("CRITICAL EXPORT ERROR:", err);
-        alert("3D Geometry is too complex. Try a different design.");
+        console.error("STLExporter crashed:", err);
         return null;
       }
     }
@@ -58,26 +64,25 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 
   return (
     <group>
-      {/* VISUAL MODEL */}
+      {/* Visual Preview */}
       <group position={[0, yOffset, 0]}>
         <Center bottom>
           <primitive object={scene} scale={pedestalSettings.scale} />
         </Center>
       </group>
 
-      {/* VISUAL PEDESTAL */}
       <group position={[0, -h / 2, 0]}>
-        <mesh ref={pedestalRef} receiveShadow>
+        <mesh ref={pedestalRef}>
           {pedestalSettings.shape === 'cylinder' ? (
             <cylinderGeometry args={[r, r, h, 64]} />
           ) : (
-            <RoundedBox args={[r * 2, h, r * 2]} radius={0.1} smoothness={4}>
+            <RoundedBox args={[r * 2, h, r * 2]} radius={0.15} smoothness={4}>
               <meshStandardMaterial color="#cbd5e1" />
             </RoundedBox>
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
-        <Text position={[0, 0, r + 0.05]} fontSize={h * 0.5} color="#1e293b">
+        <Text position={[0, 0, r + 0.05]} fontSize={h * 0.4} color="#1e293b">
           {pedestalSettings.text}
         </Text>
       </group>
