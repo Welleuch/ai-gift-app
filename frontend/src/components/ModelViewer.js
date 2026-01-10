@@ -7,59 +7,67 @@ import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
 const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const { scene } = useGLTF(url);
-  const pedestalRef = useRef();
+  const pedestalMeshRef = useRef();
 
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
       try {
         const exporter = new STLExporter();
-        const exportGroup = new THREE.Group();
+        const allVertices = [];
 
-        // 1. Process the AI Model
-        scene.traverse((child) => {
-          if (child.isMesh && child.geometry) {
-            // THE ULTIMATE FIX: Rebuild the geometry from scratch
-            // This removes "Interleaved Buffers" which cause the 'count' error
-            const posAttr = child.geometry.attributes.position;
-            if (!posAttr) return;
+        // HELPER: Extract raw triangles from any mesh
+        const extractMeshTriangles = (mesh, customMatrix = new THREE.Matrix4()) => {
+          const geom = mesh.geometry;
+          if (!geom || !geom.attributes.position) return;
 
-            const newGeometry = new THREE.BufferGeometry();
-            // Manually copy the vertex positions into a standard Float32Array
-            const vertices = new Float32Array(posAttr.array);
-            newGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+          // Convert to non-indexed to get a simple list of triangles
+          const tempGeom = geom.index ? geom.toNonIndexed() : geom.clone();
+          const position = tempGeom.attributes.position;
+          
+          mesh.updateMatrixWorld(true);
+          // Combine the mesh's world position with any extra UI adjustments
+          const finalMatrix = new THREE.Matrix4().multiplyMatrices(customMatrix, mesh.matrixWorld);
 
-            // If the AI model has an index (shortcuts), flatten it
-            if (child.geometry.index) {
-                const index = child.geometry.index.array;
-                newGeometry.setIndex(new THREE.BufferAttribute(new Uint32Array(index), 1));
-            }
-
-            const cleanMesh = new THREE.Mesh(newGeometry.toNonIndexed(), new THREE.MeshStandardMaterial());
-            
-            // Apply scale and position from the UI sliders
-            const s = pedestalSettings.scale || 1;
-            cleanMesh.scale.set(s, s, s);
-            cleanMesh.position.y = (pedestalSettings.offset || 0) / 10;
-            
-            cleanMesh.updateMatrixWorld(true);
-            exportGroup.add(cleanMesh);
+          for (let i = 0; i < position.count; i++) {
+            const v = new THREE.Vector3().fromBufferAttribute(position, i);
+            v.applyMatrix4(finalMatrix); // Bake the scale/offset into the vertex
+            allVertices.push(v.x, v.y, v.z);
           }
+          tempGeom.dispose();
+        };
+
+        // 1. Process AI Model
+        // We create a specific transform matrix based on your UI sliders
+        const modelMatrix = new THREE.Matrix4().makeScale(
+          pedestalSettings.scale,
+          pedestalSettings.scale,
+          pedestalSettings.scale
+        );
+        modelMatrix.setPosition(0, pedestalSettings.offset / 10, 0);
+
+        scene.traverse((child) => {
+          if (child.isMesh) extractMeshTriangles(child, modelMatrix);
         });
 
-        // 2. Process the Pedestal
-        if (pedestalRef.current) {
-          const pGeom = pedestalRef.current.geometry.clone();
-          const pMesh = new THREE.Mesh(pGeom, new THREE.MeshStandardMaterial());
-          pMesh.position.y = -(pedestalSettings.height / 10) / 2;
-          pMesh.updateMatrixWorld(true);
-          exportGroup.add(pMesh);
+        // 2. Process Pedestal
+        if (pedestalMeshRef.current) {
+          extractMeshTriangles(pedestalMeshRef.current);
         }
 
-        // 3. Export as Binary STL
-        return exporter.parse(exportGroup, { binary: true });
+        // 3. Create a "Perfect" unified Mesh for the exporter
+        const unifiedGeom = new THREE.BufferGeometry();
+        unifiedGeom.setAttribute('position', new THREE.Float32BufferAttribute(allVertices, 3));
+        const unifiedMesh = new THREE.Mesh(unifiedGeom);
 
+        // 4. Export (This will never fail because unifiedMesh is a standard Three.js object)
+        const stlResult = exporter.parse(unifiedMesh, { binary: true });
+        
+        // Cleanup memory
+        unifiedGeom.dispose();
+        
+        return stlResult;
       } catch (err) {
-        console.error("STLExporter process failed:", err);
+        console.error("The 'Once and For All' Exporter failed:", err);
         return null;
       }
     }
@@ -71,18 +79,22 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 
   return (
     <group>
+      {/* Visual Model for the user */}
       <group position={[0, yOffset, 0]}>
         <Center bottom>
           <primitive object={scene} scale={pedestalSettings.scale} />
         </Center>
       </group>
 
+      {/* Visual Pedestal for the user */}
       <group position={[0, -h / 2, 0]}>
-        <mesh ref={pedestalRef}>
+        <mesh ref={pedestalMeshRef}>
           {pedestalSettings.shape === 'cylinder' ? (
             <cylinderGeometry args={[r, r, h, 64]} />
           ) : (
-            <RoundedBox args={[r * 2, h, r * 2]} radius={0.1} smoothness={4} />
+            <RoundedBox args={[r * 2, h, r * 2]} radius={0.1} smoothness={4}>
+               <meshStandardMaterial color="#cbd5e1" />
+            </RoundedBox>
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
@@ -97,7 +109,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 export default function ModelViewer({ url, pedestalSettings, exporterRef }) {
   if (!url) return null;
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full bg-slate-50">
       <Canvas shadows camera={{ position: [0, 2, 5], fov: 40 }}>
         <Suspense fallback={null}>
           <Stage environment="city" intensity={0.5} shadows="contact" adjustCamera>
