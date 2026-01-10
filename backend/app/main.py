@@ -11,6 +11,11 @@ from pydantic import BaseModel
 from typing import List, Dict
 from dotenv import load_dotenv
 import boto3
+from fastapi import UploadFile, File # Add these to your imports
+import subprocess
+
+# Update this path to where YOU installed PrusaSlicer
+PRUSA_SLICER_PATH = r"C:\Program Files\Prusa3D\PrusaSlicer\prusa-slicer-console.exe"
 
 load_dotenv()
 app = FastAPI()
@@ -202,3 +207,35 @@ async def generate_3d(payload: ThreeDRequest):
         print("ERROR IN GENERATE_3D:")
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/slice")
+async def slice_model(file: UploadFile = File(...)):
+    try:
+        # 1. Save the STL from the browser to your hard drive
+        temp_stl = Path("temp_model.stl")
+        with open(temp_stl, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        output_gcode = "final_gift.gcode"
+        config_path = Path(__file__).resolve().parent.parent / "config.ini"
+
+        # 2. Run the command line slicer
+        command = [
+            PRUSA_PATH,
+            "--export-gcode",
+            "--load", str(config_path),
+            "--output", output_gcode,
+            str(temp_stl)
+        ]
+        
+        print("DEBUG: Starting Slicer process...")
+        subprocess.run(command, check=True)
+
+        # 3. Upload the resulting G-Code to Cloudflare R2
+        gcode_url = upload_to_r2(output_gcode, "final_gift.gcode")
+        
+        return {"status": "success", "gcode_url": gcode_url}
+        
+    except Exception as e:
+        print(f"SLICING ERROR: {e}")
+        return {"status": "error", "message": str(e)}

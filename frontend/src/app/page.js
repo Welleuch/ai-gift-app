@@ -8,6 +8,63 @@ import { Send, Loader2, Box, Sparkles, Cpu, Layers, Download, CheckCircle2 } fro
 // 1. Import the components
 import PedestalControls from '../components/PedestalControls';
 
+const handlePrepareGCode = async () => {
+  if (!exporterRef.current) return;
+  
+  setStatus('Slicing Model for 3D Printing...');
+  setLoading(true);
+
+  try {
+    // 1. Convert the 3D scene (Horse + Pedestal) to STL data
+    const stlData = exporterRef.current.exportSTL();
+    const blob = new Blob([stlData], { type: 'application/octet-stream' });
+    
+    // 2. Upload the STL to your Python backend
+    const formData = new FormData();
+    formData.append('file', blob, 'gift.stl');
+
+    const res = await axios.post('http://localhost:8000/api/slice', formData);
+    
+    if (res.data.gcode_url) {
+      // 3. Success! Open the G-Code link to download it
+      window.location.href = res.data.gcode_url;
+      setStatus('G-Code Downloaded!');
+    }
+  } catch (e) {
+    console.error(e);
+    setStatus('Slicing failed. Check Backend.');
+  }
+  setLoading(false);
+};
+
+const handleExportAndSlice = async () => {
+  setStatus('Preparing Manufacturing Files...');
+  setLoading(true);
+
+  try {
+    // 1. Get the STL from the viewer
+    const stlData = exporterRef.current.exportSTL();
+    const blob = new Blob([stlData], { type: 'application/octet-stream' });
+    
+    // 2. Send to Backend for Slicing
+    const formData = new FormData();
+    formData.append('file', blob, 'gift.stl');
+
+    const res = await axios.post('http://localhost:8000/api/slice', formData);
+    
+    if (res.data.gcode_url) {
+      // 3. Download the G-Code automatically
+      window.location.href = res.data.gcode_url;
+      setStatus('G-Code Ready!');
+    }
+  } catch (e) {
+    console.error(e);
+    setStatus('Error in Slicing');
+  }
+  setLoading(false);
+};
+
+
 // 2. Setup the 3D Viewer with SSR disabled
 const ModelViewer = dynamic(() => import('../components/ModelViewer'), { 
   ssr: false,
@@ -223,7 +280,7 @@ export default function Home() {
           {modelUrl && (
             <div className="w-full h-full flex flex-col gap-6 animate-in fade-in duration-1000">
               <div className="flex-1 bg-white rounded-[50px] shadow-2xl overflow-hidden relative border-[12px] border-white ring-1 ring-slate-200">
-                 <ModelViewer url={modelUrl} pedestalSettings={pedestalSettings} />
+                 <ModelViewer url={modelUrl} pedestalSettings={pedestalSettings} exporterRef={exporterRef} />
                  
                  <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
                    <button 
@@ -232,7 +289,7 @@ export default function Home() {
                    >
                      <Layers size={20}/> {showPedestalUI ? 'HIDE SETTINGS' : 'CUSTOMIZE BASE'}
                    </button>
-                   <button className="bg-blue-600 text-white px-8 py-4 rounded-2xl shadow-2xl hover:bg-blue-700 font-bold flex items-center gap-3 transition-transform hover:scale-105 active:scale-95">
+                   <button onClick={handleExportAndSlice} className="bg-blue-600 ..." >
                      <Download size={20}/> PREPARE G-CODE
                    </button>
                  </div>
