@@ -4,29 +4,28 @@ import shutil
 import requests
 import random
 import traceback
+import subprocess
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict
 from dotenv import load_dotenv
 import boto3
-from fastapi import UploadFile, File # Add these to your imports
-import subprocess
-
-# Update this path to where YOU installed PrusaSlicer
-PRUSA_SLICER_PATH = r"C:\Program Files\Prusa3D\PrusaSlicer\prusa-slicer-console.exe"
 
 load_dotenv()
 app = FastAPI()
 
-# --- CORS ---
+# --- CORS: ALLOW YOUR CLOUDFLARE URL ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- CONFIGURATION ---
+PRUSA_PATH = r"C:\Program Files\Prusa3D\PrusaSlicer\prusa-slicer-console.exe"
 
 # --- MODELS ---
 class ChatRequest(BaseModel):
@@ -38,7 +37,7 @@ class GenRequest(BaseModel):
 class ThreeDRequest(BaseModel):
     image_url: str
 
-# --- CLOUDFLARE R2 HELPERS ---
+# --- R2 HELPERS ---
 def get_r2_client():
     return boto3.client(
         service_name='s3',
@@ -49,193 +48,106 @@ def get_r2_client():
     )
 
 def upload_to_r2(local_path, file_name):
-    bucket_name = os.getenv("R2_BUCKET_NAME")
-    public_base_url = os.getenv("R2_PUBLIC_URL")
     try:
         client = get_r2_client()
+        content_type = "image/png" if file_name.endswith(".png") else "model/gltf-binary"
+        if file_name.endswith(".gcode"): content_type = "text/x.gcode"
         
-        # Determine content type - CRITICAL for 3D Viewer
-        if file_name.lower().endswith(".png"):
-            content_type = "image/png"
-        elif file_name.lower().endswith(".glb"):
-            content_type = "model/gltf-binary"  # Browser needs this for 3D
-        else:
-            content_type = "application/octet-stream"
-
-        client.upload_file(
-            local_path, 
-            bucket_name, 
-            file_name, 
-            ExtraArgs={'ContentType': content_type}
-        )
-        return f"{public_base_url}/{file_name}"
+        client.upload_file(local_path, os.getenv("R2_BUCKET_NAME"), file_name, ExtraArgs={'ContentType': content_type})
+        return f"{os.getenv('R2_PUBLIC_URL')}/{file_name}"
     except Exception as e:
         print(f"R2 Error: {e}")
         return None
 
 def trigger_workflow(workflow):
-    comfy_url = os.getenv("COMFY_URL", "http://127.0.0.1:8188")
     try:
-        resp = requests.post(f"{comfy_url}/prompt", json={"prompt": workflow})
+        resp = requests.post(f"{os.getenv('COMFY_URL')}/prompt", json={"prompt": workflow})
         return resp.json().get('prompt_id')
-    except Exception as e:
-        print(f"ComfyUI Error: {e}")
-        return None
+    except: return None
 
 # --- API ENDPOINTS ---
 
 @app.post("/api/chat")
 async def chat_with_ai(req: ChatRequest):
-    # Lean Chat: Just grab user interests
     user_input = req.history[-1]['content']
     return {
-        "response": "I'm applying 3D-printing design rules to your idea. Generating preview...",
+        "response": "Applying 3D-printing design rules... drawing your gift now!",
         "visual_prompt": user_input 
     }
 
 @app.post("/api/generate-images")
 async def generate_images(payload: GenRequest):
     try:
-        # 1. THE SUCCESSFUL TEMPLATE
-        # We only change the {payload.visual_prompt} part.
-        perfect_prompt = f"""
-        You are a creative product designer and 3D-printing expert.
-        I want to offer a 3d printed gift made completely with PLA filament of gray color. 
-        The recipient loves: {payload.visual_prompt}.
-
-        Your task is to:
-        Propose unique gift idea that is useful, thoughtful, or decorative. 
-
-        Favor designs that:
-        - Print without excessive supports and thin walls
-        - Avoid ideas that require electronics
-        - The final model must be ONE continuous object, with no separate parts, fully connected 3D mesh
-        - Please provide a visual design description suitable for generating a 3D model from the front perspective that helps a image to 3d model ai generator to generate a solid printable 3d model.
-        - Please take into consideration that the generated image will make the 3d model respects the rules of design for additive manufacturing (DfAM)
-        """
-
-        # 2. Path Handling
+        template = f"Product designer prompt: {payload.visual_prompt}. Style: matte gray PLA, 3D printed figurine, solid geometry, white background."
+        
         base_dir = Path(__file__).resolve().parent.parent 
         with open(base_dir / "workflows" / "stage1_image.json", "r") as f:
             workflow = json.load(f)
 
-        # 3. Inject ONLY the Prompt and the Seed
-        # All other settings (Steps, CFG, Res) are now read directly from your JSON
-        if "34:27" in workflow:
-            workflow["34:27"]["inputs"]["text"] = perfect_prompt
-            
-        if "34:3" in workflow:
-            workflow["34:3"]["inputs"]["seed"] = random.randint(1, 10**14)
-
-        # 4. Trigger
+        if "34:27" in workflow: workflow["34:27"]["inputs"]["text"] = template
+        if "34:3" in workflow: workflow["34:3"]["inputs"]["seed"] = random.randint(1, 10**14)
+        
         job_id = trigger_workflow(workflow)
         return {"status": "queued", "job_id": job_id}
-
     except Exception as e:
-        print("ERROR IN GENERATE_IMAGES:")
-        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/check-status/{job_id}")
 async def check_status(job_id: str):
-    comfy_url = os.getenv("COMFY_URL", "http://127.0.0.1:8188")
     try:
-        resp = requests.get(f"{comfy_url}/history/{job_id}", timeout=2)
+        resp = requests.get(f"{os.getenv('COMFY_URL')}/history/{job_id}", timeout=2)
         history = resp.json()
-    except: return {"status": "processing"}
-    
-    if not history or job_id not in history: return {"status": "processing"}
+        if not history or job_id not in history: return {"status": "processing"}
         
-    outputs = history[job_id]['outputs']
-    urls = []
-    output_dir = Path(os.getenv("COMFY_OUTPUT_DIR"))
+        outputs = history[job_id]['outputs']
+        urls = []
+        out_dir = Path(os.getenv("COMFY_OUTPUT_DIR"))
 
-    # Stage 1 (Images) & Stage 2 (3D) Check
-    for node_id in ['9', '10']:
-        if node_id in outputs:
-            node_data = outputs[node_id]
-            # Search for filenames in any list inside the node (images, files, gifs)
-            for key in node_data:
-                if isinstance(node_data[key], list):
-                    for item in node_data[key]:
-                        if 'filename' in item:
-                            fname = item['filename']
-                            # Check root AND mesh/ subfolder
-                            src = output_dir / fname
-                            if not src.exists(): src = output_dir / "mesh" / os.path.basename(fname)
-                            
-                            if src.exists():
-                                url = upload_to_r2(str(src), os.path.basename(fname))
-                                if url: urls.append(url)
-
-    if urls: return {"status": "completed", "images": urls}
-    return {"status": "processing"}
+        for node_id in ['9', '10']:
+            if node_id in outputs:
+                for key in outputs[node_id]:
+                    if isinstance(outputs[node_id][key], list):
+                        for item in outputs[node_id][key]:
+                            if 'filename' in item:
+                                fname = item['filename']
+                                src = out_dir / fname
+                                if not src.exists(): src = out_dir / "mesh" / os.path.basename(fname)
+                                if src.exists():
+                                    url = upload_to_r2(str(src), os.path.basename(fname))
+                                    if url: urls.append(url)
+        return {"status": "completed", "images": urls}
+    except: return {"status": "processing"}
 
 @app.post("/api/generate-3d")
 async def generate_3d(payload: ThreeDRequest):
     try:
-        # 1. Clear VRAM for Stage 2
         requests.post(f"{os.getenv('COMFY_URL')}/free")
-        
-        # 2. Path Handling
         filename = os.path.basename(payload.image_url)
-        src = Path(os.getenv("COMFY_OUTPUT_DIR")) / filename
-        dst = Path(os.getenv("COMFY_INPUT_DIR")) / filename
-        
-        if src.exists():
-            shutil.copy2(src, dst)
-            print(f"DEBUG: Moved {filename} to input folder")
+        shutil.copy2(Path(os.getenv("COMFY_OUTPUT_DIR")) / filename, Path(os.getenv("COMFY_INPUT_DIR")) / filename)
 
-        # 3. Load Stage 2 Workflow
         base_dir = Path(__file__).resolve().parent.parent 
         with open(base_dir / "workflows" / "stage2_3d.json", "r") as f:
             workflow = json.load(f)
 
-        # 4. Inject ONLY the image name
-        # We leave all other settings (steps, cfg, etc.) as they are in your JSON
-        if "2" in workflow:
-            workflow["2"]["inputs"]["image"] = filename
-        
-        # Randomize seed just to ensure a fresh run
-        if "7" in workflow:
-            workflow["7"]["inputs"]["seed"] = random.randint(1, 10**14)
-
+        workflow["2"]["inputs"]["image"] = filename
         job_id = trigger_workflow(workflow)
         return {"status": "queued", "job_id": job_id}
-
     except Exception as e:
-        print("ERROR IN GENERATE_3D:")
-        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/slice")
 async def slice_model(file: UploadFile = File(...)):
     try:
-        # 1. Save the STL from the browser to your hard drive
-        temp_stl = Path("temp_model.stl")
-        with open(temp_stl, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        temp_stl = Path("temp_gift.stl")
+        with open(temp_stl, "wb") as buffer: shutil.copyfileobj(file.file, buffer)
 
-        output_gcode = "final_gift.gcode"
+        output_gcode = "final_print.gcode"
         config_path = Path(__file__).resolve().parent.parent / "config.ini"
 
-        # 2. Run the command line slicer
-        command = [
-            PRUSA_PATH,
-            "--export-gcode",
-            "--load", str(config_path),
-            "--output", output_gcode,
-            str(temp_stl)
-        ]
-        
-        print("DEBUG: Starting Slicer process...")
+        command = [PRUSA_PATH, "--export-gcode", "--load", str(config_path), "--output", output_gcode, str(temp_stl)]
         subprocess.run(command, check=True)
 
-        # 3. Upload the resulting G-Code to Cloudflare R2
-        gcode_url = upload_to_r2(output_gcode, "final_gift.gcode")
-        
+        gcode_url = upload_to_r2(output_gcode, output_gcode)
         return {"status": "success", "gcode_url": gcode_url}
-        
     except Exception as e:
-        print(f"SLICING ERROR: {e}")
         return {"status": "error", "message": str(e)}
