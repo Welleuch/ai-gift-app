@@ -25,12 +25,13 @@ export default function Home() {
   const scrollRef = useRef(null);
 
   // --- NEW STATE FOR PEDESTAL ---
-  const [showPedestalUI, setShowPedestalUI] = useState(false);
   const [pedestalSettings, setPedestalSettings] = useState({
-    shape: 'cylinder',
+    shape: 'box',
     height: 10,
     radius: 30,
-    text: ''
+    text: '',
+    offset: 0, // NEW: vertical position
+    scale: 1.0  // NEW: model size
   });
 
   useEffect(() => {

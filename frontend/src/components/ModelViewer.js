@@ -4,36 +4,43 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stage, useGLTF, Center, Text, RoundedBox } from '@react-three/drei';
 
 function Model({ url, pedestalSettings }) {
-  // useGLTF will "suspend" the component until the model is downloaded
   const { scene } = useGLTF(url);
 
+  // Conversion for Three.js units
   const h = pedestalSettings.height / 10;
   const r = pedestalSettings.radius / 10;
+  const yOffset = pedestalSettings.offset / 10; // Vertical adjustment
 
   return (
     <group>
-      {/* 1. THE AI MODEL */}
-      <Center bottom>
-        <primitive object={scene} castShadow />
+      {/* 1. THE AI MODEL 
+          We add scale and position props here */}
+      <Center bottom position={[0, yOffset, 0]}>
+        <primitive 
+          object={scene} 
+          scale={pedestalSettings.scale} 
+          castShadow 
+        />
       </Center>
 
-      {/* 2. THE PEDESTAL */}
+      {/* 2. THE PEDESTAL 
+          Positioned below y=0 so the top is the "floor" */}
       <group position={[0, -h / 2, 0]}>
         <mesh receiveShadow>
           {pedestalSettings.shape === 'cylinder' ? (
             <cylinderGeometry args={[r, r, h, 64]} />
           ) : (
-            <RoundedBox args={[r * 1.8, h, r * 1.8]} radius={0.1} smoothness={4}>
-              <meshStandardMaterial color="#e2e8f0" roughness={0.4} />
+            <RoundedBox args={[r * 2, h, r * 2]} radius={0.15} smoothness={4}>
+              <meshStandardMaterial color="#d1d5db" roughness={0.4} />
             </RoundedBox>
           )}
           <meshStandardMaterial color="#cbd5e1" roughness={0.4} />
         </mesh>
 
-        {/* 3. THE TEXT (Removed the custom font path to prevent 404 error) */}
+        {/* 3. THE TEXT */}
         <Text
-          position={[0, 0, r + 0.02]} 
-          fontSize={h * 0.4} 
+          position={[0, 0, r + 0.05]} 
+          fontSize={h * 0.5} 
           color="#1e293b"
           anchorX="center"
           anchorY="middle"
@@ -47,10 +54,9 @@ function Model({ url, pedestalSettings }) {
 
 export default function ModelViewer({ url, pedestalSettings }) {
   if (!url) return null;
-
   return (
-    <div className="w-full h-full">
-      <Canvas shadows camera={{ position: [0, 2, 5], fov: 40 }}>
+    <div className="w-full h-full bg-slate-50">
+      <Canvas shadows camera={{ position: [0, 2, 5], fov: 45 }}>
         <Suspense fallback={null}>
           <Stage environment="city" intensity={0.5} shadows="contact" adjustCamera>
             <Model url={url} pedestalSettings={pedestalSettings} />

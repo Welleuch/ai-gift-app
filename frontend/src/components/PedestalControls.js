@@ -35,23 +35,24 @@ export default function PedestalControls({ settings, setSettings, onPrepare }) {
         <div className="space-y-6">
           <div>
             <div className="flex justify-between items-end mb-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Height</label>
-              <span className="text-sm font-mono font-bold text-blue-600">{settings.height}mm</span>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Model Position</label>
+              <span className="text-sm font-mono font-bold text-blue-600">{settings.offset}</span>
             </div>
-            <input type="range" min="5" max="40" step="1" value={settings.height} 
-              onChange={(e) => setSettings({...settings, height: parseInt(e.target.value)})}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+            <input type="range" min="-50" max="50" step="1" value={settings.offset} 
+              onChange={(e) => setSettings({...settings, offset: parseInt(e.target.value)})}
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500" 
             />
           </div>
 
+          {/* NEW: Scale Slider */}
           <div>
             <div className="flex justify-between items-end mb-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Width / Radius</label>
-              <span className="text-sm font-mono font-bold text-blue-600">{settings.radius}mm</span>
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Model Scale</label>
+              <span className="text-sm font-mono font-bold text-blue-600">{settings.scale}x</span>
             </div>
-            <input type="range" min="20" max="80" step="1" value={settings.radius} 
-              onChange={(e) => setSettings({...settings, radius: parseInt(e.target.value)})}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+            <input type="range" min="0.1" max="3.0" step="0.1" value={settings.scale} 
+              onChange={(e) => setSettings({...settings, scale: parseFloat(e.target.value)})}
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500" 
             />
           </div>
         </div>
