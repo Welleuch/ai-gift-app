@@ -1,68 +1,71 @@
 "use client";
-import { Settings, Type, MoveVertical, Maximize } from 'lucide-react';
+import { Settings, Type, MoveVertical, Maximize, CheckCircle2 } from 'lucide-react';
 
 export default function PedestalControls({ settings, setSettings, onPrepare }) {
   return (
-    <div className="absolute top-24 right-6 w-72 glass-card rounded-3xl p-6 shadow-2xl animate-in slide-in-from-right-4 duration-500 z-30">
-      <div className="flex items-center gap-2 mb-6 border-b pb-2">
-        <Settings size={18} className="text-blue-500" />
-        <h3 className="font-bold text-slate-700">Pedestal Settings</h3>
+    <div className="absolute top-12 right-8 w-80 glass-card rounded-[32px] p-8 shadow-2xl z-50 border border-white/50 max-h-[85vh] overflow-y-auto">
+      <div className="flex items-center gap-3 mb-8 border-b border-slate-200 pb-4">
+        <div className="bg-blue-100 p-2 rounded-xl">
+          <Settings size={20} className="text-blue-600" />
+        </div>
+        <h3 className="font-extrabold text-slate-800 text-lg">Base Customization</h3>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Shape Toggle */}
         <div>
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">Shape</label>
-          <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-3">Pedestal Shape</label>
+          <div className="flex gap-2 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200">
             <button 
               onClick={() => setSettings({...settings, shape: 'cylinder'})}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${settings.shape === 'cylinder' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${settings.shape === 'cylinder' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Cylinder
             </button>
             <button 
               onClick={() => setSettings({...settings, shape: 'box'})}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${settings.shape === 'box' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${settings.shape === 'box' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              Square
+              Rounded Square
             </button>
           </div>
         </div>
 
         {/* Dimensions */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div>
-            <div className="flex justify-between mb-1">
-              <label className="text-xs font-bold text-slate-500">Height (mm)</label>
-              <span className="text-xs font-mono text-blue-600">{settings.height}</span>
+            <div className="flex justify-between items-end mb-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Height</label>
+              <span className="text-sm font-mono font-bold text-blue-600">{settings.height}mm</span>
             </div>
-            <input type="range" min="2" max="20" value={settings.height} 
+            <input type="range" min="5" max="40" step="1" value={settings.height} 
               onChange={(e) => setSettings({...settings, height: parseInt(e.target.value)})}
-              className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
             />
           </div>
 
           <div>
-            <div className="flex justify-between mb-1">
-              <label className="text-xs font-bold text-slate-500">Radius (mm)</label>
-              <span className="text-xs font-mono text-blue-600">{settings.radius}</span>
+            <div className="flex justify-between items-end mb-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Width / Radius</label>
+              <span className="text-sm font-mono font-bold text-blue-600">{settings.radius}mm</span>
             </div>
-            <input type="range" min="10" max="50" value={settings.radius} 
+            <input type="range" min="20" max="80" step="1" value={settings.radius} 
               onChange={(e) => setSettings({...settings, radius: parseInt(e.target.value)})}
-              className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" 
             />
           </div>
         </div>
 
         {/* Text Input */}
         <div>
-          <label className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">Engraving</label>
-          <div className="relative">
-            <Type className="absolute left-3 top-3 text-slate-400" size={16} />
+          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-3">Engraved Text</label>
+          <div className="relative group">
+            <Type className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
             <input 
               type="text" 
-              placeholder="e.g. For Dad"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              maxLength={20}
+              placeholder="Type engraving..."
+              className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
               value={settings.text}
               onChange={(e) => setSettings({...settings, text: e.target.value})}
             />
@@ -71,14 +74,11 @@ export default function PedestalControls({ settings, setSettings, onPrepare }) {
 
         <button 
           onClick={onPrepare}
-          className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+          className="w-full bg-blue-600 text-white py-5 rounded-[24px] font-black text-sm shadow-xl shadow-blue-200 hover:bg-blue-700 hover:-translate-y-1 active:translate-y-0 transition-all flex items-center justify-center gap-3 mt-4"
         >
-          <CheckCircle2 size={18} /> GENERATE FINAL STL
+          <CheckCircle2 size={20} /> GENERATE FINAL STL
         </button>
       </div>
     </div>
   );
 }
-
-// Add this import to the top of the file
-import { CheckCircle2 } from 'lucide-react';
