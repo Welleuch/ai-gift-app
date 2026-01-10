@@ -48,8 +48,21 @@ def upload_to_r2(local_path, file_name):
     public_base_url = os.getenv("R2_PUBLIC_URL")
     try:
         client = get_r2_client()
-        content_type = "image/png" if file_name.lower().endswith(".png") else "model/gltf-binary"
-        client.upload_file(local_path, bucket_name, file_name, ExtraArgs={'ContentType': content_type})
+        
+        # Determine content type - CRITICAL for 3D Viewer
+        if file_name.lower().endswith(".png"):
+            content_type = "image/png"
+        elif file_name.lower().endswith(".glb"):
+            content_type = "model/gltf-binary"  # Browser needs this for 3D
+        else:
+            content_type = "application/octet-stream"
+
+        client.upload_file(
+            local_path, 
+            bucket_name, 
+            file_name, 
+            ExtraArgs={'ContentType': content_type}
+        )
         return f"{public_base_url}/{file_name}"
     except Exception as e:
         print(f"R2 Error: {e}")
