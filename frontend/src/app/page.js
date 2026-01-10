@@ -127,23 +127,32 @@ export default function Home() {
   // --- NEW: SLICING HANDLER ---
   const handlePrepareGCode = async () => {
     if (!exporterRef.current) return;
-    setStatus('Slicing for 3D Printing...');
+    setStatus('Converting to Slicer Format...');
     setLoading(true);
 
     try {
       const stlData = exporterRef.current.exportSTL();
+      if (!stlData) {
+        setLoading(false);
+        return; // Error handled inside exportSTL
+      }
+
       const blob = new Blob([stlData], { type: 'application/octet-stream' });
       const formData = new FormData();
       formData.append('file', blob, 'gift.stl');
 
+      setStatus('Slicing on Server...');
       const res = await axios.post('http://localhost:8000/api/slice', formData);
+      
       if (res.data.gcode_url) {
         window.location.href = res.data.gcode_url;
         setStatus('G-Code Ready!');
+      } else {
+        throw new Error(res.data.message || "Slicing failed");
       }
     } catch (e) {
       console.error(e);
-      setStatus('Slicing failed.');
+      setStatus('Slicing error. See Console.');
     }
     setLoading(false);
   };

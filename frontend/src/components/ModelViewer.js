@@ -11,42 +11,44 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
-      const exporter = new STLExporter();
-      const exportGroup = new THREE.Group();
+      try {
+        const exporter = new STLExporter();
+        const exportGroup = new THREE.Group();
 
-      // 1. Process the AI Model
-      // We look for every mesh inside the AI scene and flatten it
-      scene.traverse((child) => {
-        if (child.isMesh && child.geometry) {
-          const meshClone = new THREE.Mesh(child.geometry.clone(), child.material.clone());
-          
-          // Apply current UI Scale
-          meshClone.scale.set(
-            pedestalSettings.scale, 
-            pedestalSettings.scale, 
-            pedestalSettings.scale
-          );
+        // 1. Process the AI Model with EXTREME caution
+        scene.traverse((child) => {
+          // Check if it's a mesh and HAS triangular geometry
+          if (child.isMesh && child.geometry && child.geometry.attributes.position) {
+            const clone = new THREE.Mesh(child.geometry.clone(), new THREE.MeshBasicMaterial());
+            
+            // Apply the user's scale and vertical offset
+            const s = pedestalSettings.scale || 1;
+            clone.scale.set(s, s, s);
+            clone.position.y = (pedestalSettings.offset || 0) / 10;
+            
+            clone.updateMatrixWorld(true);
+            exportGroup.add(clone);
+            console.log("Exporter: Added AI Mesh component successfully");
+          }
+        });
 
-          // Apply current UI Position (Offset)
-          // We divide by 10 to match Three.js units
-          meshClone.position.y = pedestalSettings.offset / 10;
-          
-          meshClone.updateMatrixWorld();
-          exportGroup.add(meshClone);
+        // 2. Process the Pedestal
+        if (pedestalRef.current) {
+          const pClone = new THREE.Mesh(pedestalRef.current.geometry.clone(), new THREE.MeshBasicMaterial());
+          // Match the visual position of the pedestal
+          pClone.position.y = -(pedestalSettings.height / 10) / 2;
+          pClone.updateMatrixWorld(true);
+          exportGroup.add(pClone);
+          console.log("Exporter: Added Pedestal Mesh successfully");
         }
-      });
 
-      // 2. Process the Pedestal
-      if (pedestalRef.current) {
-        const pClone = pedestalRef.current.clone();
-        // Calculate pedestal Y position (it is centered at -h/2)
-        pClone.position.y = -(pedestalSettings.height / 10) / 2;
-        pClone.updateMatrixWorld();
-        exportGroup.add(pClone);
+        // 3. Final Export
+        return exporter.parse(exportGroup, { binary: true });
+      } catch (err) {
+        console.error("CRITICAL EXPORT ERROR:", err);
+        alert("3D Geometry is too complex. Try a different design.");
+        return null;
       }
-
-      // 3. Parse the clean group
-      return exporter.parse(exportGroup, { binary: true });
     }
   }));
 
@@ -56,16 +58,16 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 
   return (
     <group>
-      {/* Visual Model for Screen */}
+      {/* VISUAL MODEL */}
       <group position={[0, yOffset, 0]}>
         <Center bottom>
           <primitive object={scene} scale={pedestalSettings.scale} />
         </Center>
       </group>
 
-      {/* Visual Pedestal for Screen */}
+      {/* VISUAL PEDESTAL */}
       <group position={[0, -h / 2, 0]}>
-        <mesh ref={pedestalRef}>
+        <mesh ref={pedestalRef} receiveShadow>
           {pedestalSettings.shape === 'cylinder' ? (
             <cylinderGeometry args={[r, r, h, 64]} />
           ) : (
@@ -75,14 +77,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
-
-        <Text
-          position={[0, 0, r + 0.05]}
-          fontSize={h * 0.4}
-          color="#1e293b"
-          anchorX="center"
-          anchorY="middle"
-        >
+        <Text position={[0, 0, r + 0.05]} fontSize={h * 0.5} color="#1e293b">
           {pedestalSettings.text}
         </Text>
       </group>
@@ -93,7 +88,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 export default function ModelViewer({ url, pedestalSettings, exporterRef }) {
   if (!url) return null;
   return (
-    <div className="w-full h-full bg-slate-50">
+    <div className="w-full h-full">
       <Canvas shadows camera={{ position: [0, 2, 5], fov: 40 }}>
         <Suspense fallback={null}>
           <Stage environment="city" intensity={0.5} shadows="contact" adjustCamera>
