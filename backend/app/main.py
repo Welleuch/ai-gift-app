@@ -138,60 +138,64 @@ async def generate_3d(payload: ThreeDRequest):
 
 @app.post("/api/slice")
 async def slice_model(file: UploadFile = File(...)):
-    try:
-        job_id = str(random.randint(1000, 9999))
-        temp_stl = Path(f"temp_{job_id}.stl")
-        output_gcode = f"gift_{job_id}.gcode"
+    job_id = str(random.randint(1000, 9999))
+    base_path = Path(__file__).resolve().parent.parent
+    temp_stl = (base_path / f"temp_{job_id}.stl").absolute()
+    output_gcode = (base_path / f"gift_{job_id}.gcode").absolute()
+    config_path = (base_path / "config.ini").absolute()
 
+    try:
+        # 1. Save STL
         with open(temp_stl, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-
-        config_path = Path(__file__).resolve().parent.parent / "config.ini"
-        command = [PRUSA_PATH, "--export-gcode", "--load", str(config_path), "--output", output_gcode, str(temp_stl)]
         
-        print(f"DEBUG: Slicing job {job_id}...")
-        subprocess.run(command, check=True, capture_output=True)
+        # 2. Run Slicer and CAPTURE THE LOGS
+        command = [
+            PRUSA_PATH,
+            "--export-gcode",
+            "--center", "100,100",  # Center of a 200x200 bed is 100,100
+            "--align-z", "0",       # FORCES the lowest point of the model to z=0
+            "--load", str(config_path),
+            "--output", str(output_gcode),
+            str(temp_stl)
+        ]
+        
+        print(f"DEBUG: Running Slicer...")
+        # We capture stdout (normal talk) and stderr (error talk)
+        result = subprocess.run(command, capture_output=True, text=True)
 
-        # --- SMART METADATA EXTRACTION ---
+        # PRINT EVERYTHING PRUSASLICER SAID TO YOUR TERMINAL
+        print("--- PRUSASLICER OUTPUT ---")
+        print(result.stdout)
+        print(result.stderr)
+        print("--------------------------")
+
+        if not output_gcode.exists():
+            # If the file is missing, we look at the logs we just printed
+            return {"status": "error", "message": "Slicer rejected the geometry. Check terminal for logs."}
+
+        # 3. Upload and Parse (Same as before)
+        gcode_url = upload_to_r2(str(output_gcode), output_gcode.name)
+        content = output_gcode.read_text()
+        
         volume_cm3 = 0.0
-        print_time = "Unknown"
+        vol_match = re.search(r"filament used \[cm3\]\s*=\s*([\d\.]+)", content)
+        if vol_match: volume_cm3 = float(vol_match.group(1))
         
-        if Path(output_gcode).exists():
-            with open(output_gcode, "r") as f:
-                content = f.read()
-                
-                # 1. Search for Volume (more reliable than weight)
-                volume_match = re.search(r"filament used \[cm3\]\s*=\s*([\d\.]+)", content)
-                if volume_match:
-                    volume_cm3 = float(volume_match.group(1))
-                
-                # 2. Search for Time
-                time_match = re.search(r"estimated printing time \(normal mode\)\s*=\s*(.*)", content)
-                if time_match:
-                    print_time = time_match.group(1).strip()
-
-        # --- CALCULATE WEIGHT & PRICE ---
         weight_g = volume_cm3 * 1.24
-        material_cost = weight_g * 0.03 
-        
-        # Add a "Size Premium" if the object is large (uses more machine time)
-        machine_time_cost = (weight_g / 10) * 1.5 # 1.5€ for every 10g of print
-        
-        total_price = material_cost + machine_time_cost + 5 + 7
+        price = (weight_g * 0.05) + 12 # 5€ setup + 7€ profit
 
-        gcode_url = upload_to_r2(output_gcode, output_gcode)
-        
         # Cleanup
-        if temp_stl.exists(): temp_stl.unlink()
-        if Path(output_gcode).exists(): Path(output_gcode).unlink()
+        temp_stl.unlink(missing_ok=True)
+        output_gcode.unlink(missing_ok=True)
 
         return {
             "status": "success",
             "gcode_url": gcode_url,
-            "weight": round(weight_g, 2),
-            "print_time": print_time,
-            "price": round(total_price, 2)
+            "weight": round(weight_g, 1),
+            "price": round(price, 2),
+            "print_time": "Calculated"
         }
     except Exception as e:
-        print(f"ERROR: {traceback.format_exc()}")
+        print(traceback.format_exc())
         return {"status": "error", "message": str(e)}

@@ -14,11 +14,10 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
       try {
         const exporter = new STLExporter();
         const allVertices = [];
-
-        // --- REAL WORLD SCALING (1 unit = 1mm) ---
-        // We use the raw pedestalSettings values (84, 100, etc.) 
-        // without dividing by 10 for the export.
         
+        // h is the height in Three.js units (e.g., 1.3 for 13mm)
+        const h = pedestalSettings.height / 10;
+
         const extractMeshTriangles = (mesh, customMatrix = new THREE.Matrix4()) => {
           const geom = mesh.geometry;
           if (!geom || !geom.attributes.position) return;
@@ -32,8 +31,18 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
           for (let i = 0; i < position.count; i++) {
             const v = new THREE.Vector3().fromBufferAttribute(position, i);
             v.applyMatrix4(finalMatrix);
-            // WE MULTIPLY BY 10 HERE to convert from visual units to physical mm
-            allVertices.push(v.x * 10, v.y * 10, v.z * 10);
+            
+            // --- THE PHYSICAL FIX ---
+            // 1. Multiply by 10 to get real mm.
+            // 2. Add (height / 2) to the Y coordinate (which is Z in the slicer).
+            // This ensures the bottom of the pedestal is at 0.
+            const physicalX = v.x * 10;
+            const physicalY = v.y * 10;
+            const physicalZ = (v.z * 10) + (pedestalSettings.height / 2); 
+
+            // Note: STL uses X, Y, Z. In Three.js, Y is UP. In Slicers, Z is UP.
+            // So we map Three.js Y to STL Z.
+            allVertices.push(physicalX, physicalZ, physicalY);
           }
           tempGeom.dispose();
         };
