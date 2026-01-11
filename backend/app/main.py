@@ -171,15 +171,13 @@ async def slice_model(file: UploadFile = File(...)):
                     print_time = time_match.group(1).strip()
 
         # --- CALCULATE WEIGHT & PRICE ---
-        # Weight = Volume * Density (1.24 for PLA)
         weight_g = volume_cm3 * 1.24
+        material_cost = weight_g * 0.03 
         
-        # If the model is extremely tiny, ensure a minimum weight
-        if weight_g < 0.1: weight_g = 0.2
-
-        # 0.05€ per gram + 5€ setup + 7€ profit
-        material_cost = weight_g * 0.05
-        total_price = material_cost + 5 + 7 
+        # Add a "Size Premium" if the object is large (uses more machine time)
+        machine_time_cost = (weight_g / 10) * 1.5 # 1.5€ for every 10g of print
+        
+        total_price = material_cost + machine_time_cost + 5 + 7
 
         gcode_url = upload_to_r2(output_gcode, output_gcode)
         

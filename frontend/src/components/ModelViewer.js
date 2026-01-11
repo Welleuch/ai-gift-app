@@ -11,30 +11,60 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
 
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
-      const exporter = new STLExporter();
-      const exportGroup = new THREE.Group();
-      
-      const modelMatrix = new THREE.Matrix4().makeScale(pedestalSettings.scale, pedestalSettings.scale, pedestalSettings.scale);
-      modelMatrix.setPosition(0, pedestalSettings.offset / 10, 0);
+      try {
+        const exporter = new STLExporter();
+        const allVertices = [];
 
-      scene.traverse((child) => {
-        if (child.isMesh) {
-          const geom = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
-          const mesh = new THREE.Mesh(geom);
-          const finalMatrix = new THREE.Matrix4().multiplyMatrices(modelMatrix, child.matrixWorld);
-          mesh.applyMatrix4(finalMatrix);
-          exportGroup.add(mesh);
+        // --- REAL WORLD SCALING (1 unit = 1mm) ---
+        // We use the raw pedestalSettings values (84, 100, etc.) 
+        // without dividing by 10 for the export.
+        
+        const extractMeshTriangles = (mesh, customMatrix = new THREE.Matrix4()) => {
+          const geom = mesh.geometry;
+          if (!geom || !geom.attributes.position) return;
+
+          const tempGeom = geom.index ? geom.toNonIndexed() : geom.clone();
+          const position = tempGeom.attributes.position;
+          
+          mesh.updateMatrixWorld(true);
+          const finalMatrix = new THREE.Matrix4().multiplyMatrices(customMatrix, mesh.matrixWorld);
+
+          for (let i = 0; i < position.count; i++) {
+            const v = new THREE.Vector3().fromBufferAttribute(position, i);
+            v.applyMatrix4(finalMatrix);
+            // WE MULTIPLY BY 10 HERE to convert from visual units to physical mm
+            allVertices.push(v.x * 10, v.y * 10, v.z * 10);
+          }
+          tempGeom.dispose();
+        };
+
+        // 1. Process AI Model
+        const modelMatrix = new THREE.Matrix4().makeScale(
+          pedestalSettings.scale,
+          pedestalSettings.scale,
+          pedestalSettings.scale
+        );
+        // Position it based on the offset
+        modelMatrix.setPosition(0, pedestalSettings.offset / 10, 0);
+
+        scene.traverse((child) => {
+          if (child.isMesh) extractMeshTriangles(child, modelMatrix);
+        });
+
+        // 2. Process Pedestal
+        if (pedestalMeshRef.current) {
+          extractMeshTriangles(pedestalMeshRef.current);
         }
-      });
 
-      if (pedestalMeshRef.current) {
-        const pClone = pedestalMeshRef.current.clone();
-        pClone.position.y = -(pedestalSettings.height / 10) / 2;
-        pClone.updateMatrixWorld(true);
-        exportGroup.add(pClone);
+        const unifiedGeom = new THREE.BufferGeometry();
+        unifiedGeom.setAttribute('position', new THREE.Float32BufferAttribute(allVertices, 3));
+        const unifiedMesh = new THREE.Mesh(unifiedGeom);
+
+        return exporter.parse(unifiedMesh, { binary: true });
+      } catch (err) {
+        console.error("Export failed:", err);
+        return null;
       }
-
-      return exporter.parse(exportGroup, { binary: true });
     }
   }));
 
