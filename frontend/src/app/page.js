@@ -147,52 +147,53 @@ export default function Home() {
     };
 
     const [lastSlicedConfig, setLastSlicedConfig] = useState(null);
+    const [cachedOrderData, setCachedOrderData] = useState(null);
+
 
     // 2. Update the handlePrepareGCode function:
-    const handlePrepareGCode = async () => {
-        if (!exporterRef.current) return;
+const handlePrepareGCode = async () => {
+  if (!exporterRef.current) return;
 
-        // --- NEW: THE CACHE CHECK ---
-        // We create a unique string representing the current design
-        const currentConfig = JSON.stringify({
-            url: modelUrl,
-            ...pedestalSettings
-        });
+  // Create a snapshot of current settings
+  const currentConfig = JSON.stringify({
+    url: modelUrl,
+    ...pedestalSettings
+  });
 
-        // If the current design is the same as the last time we sliced, 
-        // just show the modal and STOP. No new upload, no new slicing!
-        if (currentConfig === lastSlicedConfig && orderSummary) {
-            console.log("DEBUG: Config hasn't changed. Showing cached price.");
-            return; // This prevents the rest of the function from running
-        }
-        // -----------------------------
+  // --- THE IMPROVED CACHE CHECK ---
+  // If config matches AND we have cached data, just show it immediately!
+  if (currentConfig === lastSlicedConfig && cachedOrderData) {
+    console.log("DEBUG: Using cached G-code data.");
+    setOrderSummary(cachedOrderData); // Re-show the modal with old data
+    return; // STOP HERE - Do not talk to the backend
+  }
+  // ---------------------------------
 
-        setStatus('Analyzing G-Code & Calculating Price...');
-        setLoading(true);
+  setStatus('Analyzing G-Code & Calculating Price...');
+  setLoading(true);
 
-        try {
-            const stlData = exporterRef.current.exportSTL();
-            const blob = new Blob([stlData], {
-                type: 'application/octet-stream'
-            });
-            const formData = new FormData();
-            formData.append('file', blob, 'gift.stl');
+  try {
+    const stlData = exporterRef.current.exportSTL();
+    const blob = new Blob([stlData], { type: 'application/octet-stream' });
+    const formData = new FormData();
+    formData.append('file', blob, 'gift.stl');
 
-            const res = await axios.post('http://localhost:8000/api/slice', formData);
+    const res = await axios.post('http://localhost:8000/api/slice', formData);
+    
+    if (res.data.status === 'success') {
+      // Save to BOTH states
+      setOrderSummary(res.data);      // This shows the modal now
+      setCachedOrderData(res.data);   // This keeps it for later
+      setLastSlicedConfig(currentConfig); 
+      
+      setStatus('Ready for Checkout');
+    }
+  } catch (e) {
+    setStatus('Slicing failed');
+  }
+  setLoading(false);
+};
 
-            if (res.data.status === 'success') {
-                setOrderSummary(res.data);
-                // --- NEW: SAVE THE CONFIG ---
-                // Remember this configuration so we don't slice it again
-                setLastSlicedConfig(currentConfig);
-                // ----------------------------
-                setStatus('Ready for Checkout');
-            }
-        } catch (e) {
-            setStatus('Slicing failed');
-        }
-        setLoading(false);
-    };
     // If not mounted, return empty to avoid SSR errors
     if (!mounted) return null;
 
