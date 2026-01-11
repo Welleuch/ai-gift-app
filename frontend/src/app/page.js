@@ -76,9 +76,7 @@ export default function Home() {
         setStatus('AI is thinking...');
 
         try {
-            const res = await axios.post('http://localhost:8000/api/chat', {
-                history: newHistory
-            });
+            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/chat`, { history: newHistory });
             if (res.data.visual_prompt) {
                 setStatus('Optimizing for 3D Printing...');
                 const genRes = await axios.post('http://localhost:8000/api/generate-images', {
@@ -100,7 +98,7 @@ export default function Home() {
     const pollForImages = (jobId) => {
         const interval = setInterval(async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/check-status/${jobId}`);
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/check-status/${jobId}`);
                 if (res.data.status === 'completed') {
                     clearInterval(interval);
                     setGeneratedImages(res.data.images);
@@ -119,9 +117,8 @@ export default function Home() {
         setStatus('Reconstructing 3D Mesh...');
         setGeneratedImages([]);
         try {
-            const res = await axios.post('http://localhost:8000/api/generate-3d', {
-                image_url: imgUrl
-            });
+            const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/generate-3d`, { image_url: imgUrl });
+
             pollFor3D(res.data.job_id);
         } catch (e) {
             setLoading(false);
@@ -131,7 +128,7 @@ export default function Home() {
     const pollFor3D = (jobId) => {
         const interval = setInterval(async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/check-status/${jobId}`);
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/check-status/${jobId}`);
                 if (res.data.status === 'completed') {
                     const glbFile = res.data.images.find(url => url.toLowerCase().endsWith('.glb'));
                     if (glbFile) {
@@ -178,7 +175,7 @@ const handlePrepareGCode = async () => {
     const formData = new FormData();
     formData.append('file', blob, 'gift.stl');
 
-    const res = await axios.post('http://localhost:8000/api/slice', formData);
+    const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/slice`, formData);
     
     if (res.data.status === 'success') {
       // Save to BOTH states
