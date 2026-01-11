@@ -47,8 +47,6 @@ export default function Home() {
     const [showPedestalUI, setShowPedestalUI] = useState(false);
     const [orderSummary, setOrderSummary] = useState(null);
     const [isOrdered, setIsOrdered] = useState(false);
-    const [lastSlicedConfig, setLastSlicedConfig] = useState(null);
-
 
     const [pedestalSettings, setPedestalSettings] = useState({
         shape: 'box',
