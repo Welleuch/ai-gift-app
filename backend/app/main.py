@@ -149,34 +149,51 @@ async def slice_model(file: UploadFile = File(...)):
         config_path = Path(__file__).resolve().parent.parent / "config.ini"
         command = [PRUSA_PATH, "--export-gcode", "--load", str(config_path), "--output", output_gcode, str(temp_stl)]
         
-        subprocess.run(command, check=True)
+        print(f"DEBUG: Slicing job {job_id}...")
+        subprocess.run(command, check=True, capture_output=True)
 
-        # --- NEW: EXTRACT METADATA ---
-        weight_g = 0.0
+        # --- SMART METADATA EXTRACTION ---
+        volume_cm3 = 0.0
         print_time = "Unknown"
         
-        with open(output_gcode, "r") as f:
-            content = f.read()
-            # PrusaSlicer format: "; filament used [g] = 12.34"
-            weight_match = re.search(r"filament used \[g\] = ([\d\.]+)", content)
-            time_match = re.search(r"estimated printing time \(normal mode\) = (.*)", content)
-            
-            if weight_match: weight_g = float(weight_match.group(1))
-            if time_match: print_time = time_match.group(1).strip()
+        if Path(output_gcode).exists():
+            with open(output_gcode, "r") as f:
+                content = f.read()
+                
+                # 1. Search for Volume (more reliable than weight)
+                volume_match = re.search(r"filament used \[cm3\]\s*=\s*([\d\.]+)", content)
+                if volume_match:
+                    volume_cm3 = float(volume_match.group(1))
+                
+                # 2. Search for Time
+                time_match = re.search(r"estimated printing time \(normal mode\)\s*=\s*(.*)", content)
+                if time_match:
+                    print_time = time_match.group(1).strip()
 
-        # Upload G-Code to R2
+        # --- CALCULATE WEIGHT & PRICE ---
+        # Weight = Volume * Density (1.24 for PLA)
+        weight_g = volume_cm3 * 1.24
+        
+        # If the model is extremely tiny, ensure a minimum weight
+        if weight_g < 0.1: weight_g = 0.2
+
+        # 0.05€ per gram + 5€ setup + 7€ profit
+        material_cost = weight_g * 0.05
+        total_price = material_cost + 5 + 7 
+
         gcode_url = upload_to_r2(output_gcode, output_gcode)
         
-        # Calculate Price
-        material_cost = weight_g * 0.03 # 0.03€ per gram
-        total_price = material_cost + 5 + 7 # Base fee + Profit
-        
+        # Cleanup
+        if temp_stl.exists(): temp_stl.unlink()
+        if Path(output_gcode).exists(): Path(output_gcode).unlink()
+
         return {
             "status": "success",
             "gcode_url": gcode_url,
-            "weight": weight_g,
+            "weight": round(weight_g, 2),
             "print_time": print_time,
             "price": round(total_price, 2)
         }
     except Exception as e:
+        print(f"ERROR: {traceback.format_exc()}")
         return {"status": "error", "message": str(e)}
