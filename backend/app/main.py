@@ -149,43 +149,51 @@ async def slice_model(file: UploadFile = File(...)):
         with open(temp_stl, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # 2. Run Slicer and CAPTURE THE LOGS
+        # 2. Run Slicer (REMOVED --align-z, ADDED --ensure-on-bed)
         command = [
             PRUSA_PATH,
             "--export-gcode",
-            "--center", "100,100",  # Center of a 200x200 bed is 100,100
-            "--align-z", "0",       # FORCES the lowest point of the model to z=0
+            "--center", "100,100", # Center of your 200x200 bed
+            "--ensure-on-bed",     # Correct flag for 2.9.4
             "--load", str(config_path),
             "--output", str(output_gcode),
             str(temp_stl)
         ]
         
-        print(f"DEBUG: Running Slicer...")
-        # We capture stdout (normal talk) and stderr (error talk)
+        print(f"DEBUG: Running Slicer for {temp_stl.name}...")
         result = subprocess.run(command, capture_output=True, text=True)
 
-        # PRINT EVERYTHING PRUSASLICER SAID TO YOUR TERMINAL
-        print("--- PRUSASLICER OUTPUT ---")
-        print(result.stdout)
-        print(result.stderr)
-        print("--------------------------")
-
         if not output_gcode.exists():
-            # If the file is missing, we look at the logs we just printed
-            return {"status": "error", "message": "Slicer rejected the geometry. Check terminal for logs."}
+            print("--- SLICER ERROR LOG ---")
+            print(result.stderr)
+            return {"status": "error", "message": "Slicer failed to create G-code."}
 
-        # 3. Upload and Parse (Same as before)
-        gcode_url = upload_to_r2(str(output_gcode), output_gcode.name)
+        # 3. Read G-Code and Extract Volume
         content = output_gcode.read_text()
         
+        # We search for cm3 because grams was 0 in your previous test
         volume_cm3 = 0.0
-        vol_match = re.search(r"filament used \[cm3\]\s*=\s*([\d\.]+)", content)
-        if vol_match: volume_cm3 = float(vol_match.group(1))
+        print_time = "Unknown"
         
-        weight_g = volume_cm3 * 1.24
-        price = (weight_g * 0.05) + 12 # 5€ setup + 7€ profit
+        vol_match = re.search(r"filament used \[cm3\]\s*=\s*([\d\.]+)", content)
+        time_match = re.search(r"estimated printing time \(normal mode\)\s*=\s*(.*)", content)
+        
+        if vol_match: volume_cm3 = float(vol_match.group(1))
+        if time_match: print_time = time_match.group(1).strip()
 
-        # Cleanup
+        # 4. Math: Weight & Price
+        # PLA Density is 1.24g/cm3
+        weight_g = volume_cm3 * 1.24
+        # Pricing: (Material * 0.05) + 5€ setup + 7€ profit
+        price = (weight_g * 0.05) + 5 + 7
+        
+        # Force a minimum price for tiny objects
+        if price < 12.00: price = 12.00
+
+        # 5. Upload to R2
+        gcode_url = upload_to_r2(str(output_gcode), output_gcode.name)
+
+        # Cleanup local files
         temp_stl.unlink(missing_ok=True)
         output_gcode.unlink(missing_ok=True)
 
@@ -193,8 +201,8 @@ async def slice_model(file: UploadFile = File(...)):
             "status": "success",
             "gcode_url": gcode_url,
             "weight": round(weight_g, 1),
-            "price": round(price, 2),
-            "print_time": "Calculated"
+            "print_time": print_time,
+            "price": round(price, 2)
         }
     except Exception as e:
         print(traceback.format_exc())

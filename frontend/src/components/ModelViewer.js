@@ -37,12 +37,12 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
             // 2. Add (height / 2) to the Y coordinate (which is Z in the slicer).
             // This ensures the bottom of the pedestal is at 0.
             const physicalX = v.x * 10;
-            const physicalY = v.y * 10;
-            const physicalZ = (v.z * 10) + (pedestalSettings.height / 2); 
+            const physicalY = v.y * 10; // This is Three.js height
+            const physicalZ = v.z * 10;
 
             // Note: STL uses X, Y, Z. In Three.js, Y is UP. In Slicers, Z is UP.
             // So we map Three.js Y to STL Z.
-            allVertices.push(physicalX, physicalZ, physicalY);
+            allVertices.push(physicalX, physicalZ, physicalY + (pedestalSettings.height / 2));
           }
           tempGeom.dispose();
         };
