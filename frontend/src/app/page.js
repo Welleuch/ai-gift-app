@@ -31,6 +31,8 @@ export default function Home() {
   const [showPedestalUI, setShowPedestalUI] = useState(false);
   const [orderSummary, setOrderSummary] = useState(null);
   const [isOrdered, setIsOrdered] = useState(false);
+  const [lastSlicedConfig, setLastSlicedConfig] = useState(null);
+
 
   const [pedestalSettings, setPedestalSettings] = useState({
     shape: 'box',
@@ -112,23 +114,51 @@ export default function Home() {
     }, 3000);
   };
 
-  const handlePrepareGCode = async () => {
-    if (!exporterRef.current) return;
-    setStatus('Calculating Material Costs...');
-    setLoading(true);
-    try {
-      const stlData = exporterRef.current.exportSTL();
-      const blob = new Blob([stlData], { type: 'application/octet-stream' });
-      const formData = new FormData();
-      formData.append('file', blob, 'gift.stl');
-      const res = await axios.post('http://localhost:8000/api/slice', formData);
-      if (res.data.status === 'success') {
-        setOrderSummary(res.data);
-      }
-    } catch (e) { console.error(e); }
-    setLoading(false);
-  };
+const [lastSlicedConfig, setLastSlicedConfig] = useState(null);
 
+// 2. Update the handlePrepareGCode function:
+const handlePrepareGCode = async () => {
+  if (!exporterRef.current) return;
+
+  // --- NEW: THE CACHE CHECK ---
+  // We create a unique string representing the current design
+  const currentConfig = JSON.stringify({
+    url: modelUrl,
+    ...pedestalSettings
+  });
+
+  // If the current design is the same as the last time we sliced, 
+  // just show the modal and STOP. No new upload, no new slicing!
+  if (currentConfig === lastSlicedConfig && orderSummary) {
+    console.log("DEBUG: Config hasn't changed. Showing cached price.");
+    return; // This prevents the rest of the function from running
+  }
+  // -----------------------------
+
+  setStatus('Analyzing G-Code & Calculating Price...');
+  setLoading(true);
+
+  try {
+    const stlData = exporterRef.current.exportSTL();
+    const blob = new Blob([stlData], { type: 'application/octet-stream' });
+    const formData = new FormData();
+    formData.append('file', blob, 'gift.stl');
+
+    const res = await axios.post('http://localhost:8000/api/slice', formData);
+    
+    if (res.data.status === 'success') {
+      setOrderSummary(res.data);
+      // --- NEW: SAVE THE CONFIG ---
+      // Remember this configuration so we don't slice it again
+      setLastSlicedConfig(currentConfig);
+      // ----------------------------
+      setStatus('Ready for Checkout');
+    }
+  } catch (e) {
+    setStatus('Slicing failed');
+  }
+  setLoading(false);
+};
   // If not mounted, return empty to avoid SSR errors
   if (!mounted) return null;
 
@@ -177,7 +207,15 @@ export default function Home() {
               <div className="flex-1 bg-white rounded-[50px] shadow-2xl overflow-hidden border-[12px] border-white">
                 <ModelViewer url={modelUrl} pedestalSettings={pedestalSettings} exporterRef={exporterRef} />
                 <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4">
-                  <button onClick={() => setShowPedestalUI(!showPedestalUI)} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-bold shadow-xl">CUSTOMIZE BASE</button>
+                  <button 
+		  onClick={() => {
+  		  setShowPedestalUI(!showPedestalUI);
+ 		   setOrderSummary(null); // Hide the old price when they start editing again
+		  }}
+		  className="..."
+		>
+ 		 <Layers size={20}/> {showPedestalUI ? 'HIDE SETTINGS' : 'CUSTOMIZE BASE'}
+		</button>
                   <button onClick={handlePrepareGCode} className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold shadow-xl">PREPARE G-CODE</button>
                 </div>
               </div>
