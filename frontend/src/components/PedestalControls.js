@@ -1,85 +1,91 @@
 "use client";
-import { Settings, Type, MoveVertical, Maximize, CheckCircle2 } from 'lucide-react';
+import { Settings, Type, Maximize, CheckCircle2, Ruler } from 'lucide-react';
 
 export default function PedestalControls({ settings, setSettings, onPrepare }) {
   return (
     <div className="absolute top-12 right-8 w-80 glass-card rounded-[32px] p-8 shadow-2xl z-50 border border-white/50 max-h-[85vh] overflow-y-auto">
-      <div className="flex items-center gap-3 mb-8 border-b border-slate-200 pb-4">
-        <div className="bg-blue-100 p-2 rounded-xl">
-          <Settings size={20} className="text-blue-600" />
+      <div className="flex items-center gap-3 mb-6 border-b border-slate-200 pb-4">
+        <div className="bg-blue-100 p-2 rounded-xl text-blue-600">
+          <Ruler size={20} />
         </div>
-        <h3 className="font-extrabold text-slate-800 text-lg">Base Customization</h3>
+        <div>
+          <h3 className="font-extrabold text-slate-800">Print Size</h3>
+          <p className="text-[10px] text-slate-400 font-bold uppercase">Max: 100 x 100 mm</p>
+        </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Shape Toggle */}
-        <div>
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-3">Pedestal Shape</label>
-          <div className="flex gap-2 p-1.5 bg-slate-100/50 rounded-2xl border border-slate-200">
-            <button 
-              onClick={() => setSettings({...settings, shape: 'cylinder'})}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${settings.shape === 'cylinder' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Cylinder
+        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <button onClick={() => setSettings({...settings, shape: 'cylinder'})}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${settings.shape === 'cylinder' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>
+              Round
             </button>
-            <button 
-              onClick={() => setSettings({...settings, shape: 'box'})}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${settings.shape === 'box' ? 'bg-white shadow-md text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Rounded Square
+            <button onClick={() => setSettings({...settings, shape: 'box'})}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${settings.shape === 'box' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}>
+              Square
             </button>
-          </div>
         </div>
 
-        {/* Dimensions */}
-        <div className="space-y-6">
-          <div>
-            <div className="flex justify-between items-end mb-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Model Position</label>
-              <span className="text-sm font-mono font-bold text-blue-600">{settings.offset}</span>
+        {/* Real Dimensions Readout */}
+        <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-100">
+            <div className="text-center">
+                <p className="text-[9px] font-black text-slate-400 uppercase">Width</p>
+                <p className="text-sm font-mono font-bold text-slate-700">{settings.width}mm</p>
             </div>
-            <input type="range" min="-50" max="50" step="1" value={settings.offset} 
-              onChange={(e) => setSettings({...settings, offset: parseInt(e.target.value)})}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500" 
-            />
-          </div>
+            <div className="text-center border-x border-slate-100">
+                <p className="text-[9px] font-black text-slate-400 uppercase">Depth</p>
+                <p className="text-sm font-mono font-bold text-slate-700">{settings.depth}mm</p>
+            </div>
+            <div className="text-center">
+                <p className="text-[9px] font-black text-slate-400 uppercase">Height</p>
+                <p className="text-sm font-mono font-bold text-slate-700">{settings.height}mm</p>
+            </div>
+        </div>
 
-          {/* NEW: Scale Slider */}
-          <div>
-            <div className="flex justify-between items-end mb-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Model Scale</label>
-              <span className="text-sm font-mono font-bold text-blue-600">{settings.scale}x</span>
-            </div>
-            <input type="range" min="0.1" max="3.0" step="0.1" value={settings.scale} 
-              onChange={(e) => setSettings({...settings, scale: parseFloat(e.target.value)})}
-              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-green-500" 
-            />
-          </div>
+        {/* Sliders */}
+        <div className="space-y-4">
+          <DimensionSlider label="Base Width" val={settings.width} min={20} max={100} 
+            onChange={(v) => setSettings({...settings, width: v, depth: settings.shape === 'cylinder' ? v : settings.depth})} />
+          
+          {settings.shape === 'box' && (
+            <DimensionSlider label="Base Depth" val={settings.depth} min={20} max={100} 
+                onChange={(v) => setSettings({...settings, depth: v})} />
+          )}
+
+          <DimensionSlider label="Base Height" val={settings.height} min={5} max={30} 
+            onChange={(v) => setSettings({...settings, height: v})} />
+          
+          <DimensionSlider label="Model Lift" val={settings.offset} min={-50} max={50} 
+            onChange={(v) => setSettings({...settings, offset: v})} color="accent-orange-500" />
+
+          <DimensionSlider label="Model Scale" val={settings.scale} min={0.1} max={3.0} step={0.1}
+            onChange={(v) => setSettings({...settings, scale: v})} color="accent-green-500" />
         </div>
 
         {/* Text Input */}
         <div>
-          <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-3">Engraved Text</label>
-          <div className="relative group">
-            <Type className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={18} />
-            <input 
-              type="text" 
-              maxLength={20}
-              placeholder="Type engraving..."
-              className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 pl-12 pr-4 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
-              value={settings.text}
-              onChange={(e) => setSettings({...settings, text: e.target.value})}
-            />
-          </div>
+          <label className="text-[10px] font-black text-slate-500 uppercase block mb-2">Engraving</label>
+          <input type="text" maxLength={20} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+            value={settings.text} onChange={(e) => setSettings({...settings, text: e.target.value})} placeholder="Type here..."/>
         </div>
 
-        <button 
-          onClick={onPrepare}
-          className="w-full bg-slate-900 text-white py-5 rounded-[24px] font-black text-sm shadow-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-3 mt-4"
-        >
-          <CheckCircle2 size={20} /> HIDE SETTINGS
+        <button onClick={onPrepare} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-sm hover:bg-black transition-all flex items-center justify-center gap-2">
+          <CheckCircle2 size={18} /> HIDE SETTINGS
         </button>
       </div>
     </div>
   );
+}
+
+function DimensionSlider({ label, val, min, max, step=1, onChange, color="accent-blue-600" }) {
+    return (
+        <div>
+            <div className="flex justify-between mb-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">{label}</span>
+            </div>
+            <input type="range" min={min} max={max} step={step} value={val} onChange={(e) => onChange(parseFloat(e.target.value))}
+                className={`w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer ${color}`} />
+        </div>
+    )
 }

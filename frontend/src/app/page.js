@@ -33,7 +33,13 @@ export default function Home() {
   const [isOrdered, setIsOrdered] = useState(false);
 
   const [pedestalSettings, setPedestalSettings] = useState({
-    shape: 'box', height: 10, radius: 30, text: '', offset: 0, scale: 1.0
+    shape: 'box',
+    height: 10,  // mm
+    width: 60,   // mm
+    depth: 60,   // mm
+    text: '',
+    offset: 0,
+    scale: 1.0
   });
 
   const scrollRef = useRef(null);
