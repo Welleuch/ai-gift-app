@@ -10,6 +10,12 @@ import PedestalControls from '../components/PedestalControls';
 // NEXT_PUBLIC_API_URL should be: https://api.runpod.ai/v2/tdruhtxrmqrksm
 const API_BASE = "https://3d-gift-manager.walid-elleuch.workers.dev";
 
+const runpodConfig = {
+  headers: {
+    'Content-Type': 'application/json'
+    // NO Authorization header - Worker handles it
+  }
+};
 
 const ModelViewer = dynamic(() => import('../components/ModelViewer'), { 
   ssr: false,
