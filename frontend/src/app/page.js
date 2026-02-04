@@ -426,15 +426,18 @@ const handleSelectImage = async (imgUrl) => {
               alt={`Design ${idx + 1}`}
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               onError={(e) => {
-                console.error('Image failed to load:', imgUrl);
-                e.target.style.display = 'none';
-                e.target.parentElement.innerHTML = `
-                  <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300">
-                    <div class="text-slate-500 text-sm font-bold mb-2">Design ${idx + 1}</div>
-                    <div class="text-slate-400 text-xs">Click to generate 3D</div>
-                  </div>
-                `;
-              }}
+  console.error('Image failed to load:', imgUrl);
+  e.target.style.display = 'none';
+  e.target.parentElement.innerHTML = `
+    <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 p-4">
+      <div class="text-slate-700 text-sm font-bold mb-2 text-center">Image Failed to Load</div>
+      <div class="text-slate-500 text-xs text-center">Prompt might be invalid</div>
+      <button onclick="location.reload()" class="mt-3 px-3 py-1 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600">
+        Try Again
+      </button>
+    </div>
+  `;
+}}
               onLoad={() => console.log(`Image ${idx + 1} loaded successfully`)}
             />
           </div>
