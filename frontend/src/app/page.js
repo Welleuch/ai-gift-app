@@ -310,54 +310,129 @@ export default function Home() {
         </div>
       </div>
 
-      {/* MAIN WORKBENCH - Rest of your JSX */}
-      {/* ... keep the rest of your JSX the same ... */}
-    </div>
-
-  );
-  {/* IMAGE GALLERY SECTION */ }
-  {
-    generatedImages.length > 0 && (
-      <div className="absolute bottom-8 left-8 right-8 bg-white/80 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
-          <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-            {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          {generatedImages.map((imgUrl, idx) => (
-            <div
-              key={idx}
-              className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300"
-              onClick={() => handleSelectImage(imgUrl)}
-            >
-              <img
-                src={imgUrl}
-                alt={`Design ${idx + 1}`}
-                className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                onError={(e) => {
-                  console.error('Image failed to load:', imgUrl);
-                  e.target.src = `https://placehold.co/400x300/94a3b8/white?text=Design+${idx + 1}`;
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="absolute bottom-3 left-3 right-3">
-                  <div className="text-white text-xs font-bold">Click to generate 3D</div>
+      {/* MAIN WORKBENCH */}
+      <div className="flex-1 relative">
+        {/* 3D VIEWER */}
+        <div className="absolute inset-0">
+          {modelUrl ? (
+            <ModelViewer 
+              url={modelUrl} 
+              pedestalSettings={pedestalSettings} 
+              exporterRef={exporterRef} 
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="text-center space-y-6">
+                <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-100 to-slate-100 rounded-3xl flex items-center justify-center shadow-xl">
+                  <Box className="text-blue-400" size={40} />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 text-lg">Ready for 3D Creation</h3>
+                  <p className="text-slate-500 text-sm max-w-sm mx-auto mt-2">
+                    Describe your gift idea and I'll generate custom 3D designs for you
+                  </p>
                 </div>
               </div>
-              <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full">
-                {idx + 1}
-              </div>
             </div>
-          ))}
+          )}
         </div>
-        <div className="mt-4 text-center">
-          <p className="text-xs text-slate-500 font-medium">
-            Click any design to generate a 3D printable model
-          </p>
+
+        {/* IMAGE GALLERY SECTION */}
+        {generatedImages.length > 0 && (
+          <div className="absolute bottom-8 left-8 right-8 bg-white/80 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {generatedImages.map((imgUrl, idx) => (
+                <div
+                  key={idx}
+                  className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300"
+                  onClick={() => handleSelectImage(imgUrl)}
+                >
+                  <img
+                    src={imgUrl}
+                    alt={`Design ${idx + 1}`}
+                    className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={(e) => {
+                      console.error('Image failed to load:', imgUrl);
+                      e.target.src = `https://placehold.co/400x300/94a3b8/white?text=Design+${idx + 1}`;
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <div className="text-white text-xs font-bold">Click to generate 3D</div>
+                    </div>
+                  </div>
+                  <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full">
+                    {idx + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 text-center">
+              <p className="text-xs text-slate-500 font-medium">
+                Click any design to generate a 3D printable model
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* PEDESTAL UI */}
+        {showPedestalUI && (
+          <PedestalControls
+            settings={pedestalSettings}
+            setSettings={setPedestalSettings}
+            onPrepare={handlePrepareGCode}
+          />
+        )}
+
+        {/* CONTROL BAR */}
+        <div className="absolute top-8 left-8 right-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowPedestalUI(!showPedestalUI)}
+              className="glass-card px-6 py-3 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all"
+            >
+              <Settings size={18} className="inline mr-2" />
+              Print Settings
+            </button>
+            {orderSummary && (
+              <div className="glass-card px-6 py-3 rounded-2xl">
+                <div className="text-sm font-bold text-slate-800">
+                  Est. Print: <span className="text-green-600">{orderSummary.print_time}</span> • 
+                  Weight: <span className="text-blue-600">{orderSummary.weight}</span> • 
+                  Price: <span className="text-purple-600">{orderSummary.price}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {modelUrl && (
+              <button
+                onClick={handlePrepareGCode}
+                className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black transition-all flex items-center gap-2"
+              >
+                <Download size={18} />
+                Order Print
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* STATUS INDICATOR */}
+        {status && !loading && (
+          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg border border-white/50">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+              <CheckCircle2 size={16} className="text-green-500" />
+              {status}
+            </div>
+          </div>
+        )}
       </div>
-    )
-  }
+    </div>
+  );
 }
