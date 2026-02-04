@@ -50,127 +50,104 @@ export default function Home() {
 
   // 1. CHAT & IMAGE GENERATION FLOW
   const sendMessage = async () => {
-    if (!input || loading) return;
+  if (!input || loading) return;
 
-    // Store the input value in a local variable BEFORE clearing it
-    const userMessage = input; // <-- FIX: Store in local variable
+  // Store the input value in a local variable BEFORE clearing it
+  const userMessage = input;
+  const newHistory = [...messages, { role: 'user', content: userMessage }];
+  setMessages(newHistory);
+  setInput('');
+  setLoading(true);
+  setStatus('AI is thinking...');
+  setGeneratedImages([]); // Clear any previous images
+  setModelUrl(null); // Clear any previous model
 
-    const newHistory = [...messages, { role: 'user', content: userMessage }];
-    setMessages(newHistory);
-    setInput(''); // Clear input AFTER storing
-    setLoading(true);
-    setStatus('AI is thinking...');
+  try {
+    console.log('Sending request to Worker for chat...');
 
-    try {
-      console.log('Sending request to Worker...');
+    // Step A: Call the Serverless Manager for Chat
+    const chatRes = await axios.post(`${API_BASE}/runsync`, {
+      input: {
+        type: "CHAT",
+        message: userMessage
+      }
+    }, runpodConfig);
 
-      // Step A: Call the Serverless Manager for Chat
-      const chatRes = await axios.post(`${API_BASE}/runsync`, {
+    console.log('Worker response:', chatRes.data);
+    const output = chatRes.data.output;
+
+    if (!output) {
+      throw new Error('No output from chat');
+    }
+
+    // Show the response from AI
+    setMessages([...newHistory, { role: 'assistant', content: output.response }]);
+    
+    // Check if we have visual prompts
+    if (output.visual_prompts && output.visual_prompts.length > 0) {
+      console.log('Visual prompts found:', output.visual_prompts);
+      setStatus(`Generating ${output.visual_prompts.length} high-resolution designs...`);
+      
+      // Step B: Generate images for each visual prompt
+      const genRes = await axios.post(`${API_BASE}/runsync`, {
         input: {
-          type: "CHAT",
-          message: userMessage // <-- Use the local variable
+          type: "GEN_IMAGE",
+          visual_prompts: output.visual_prompts
         }
       }, runpodConfig);
 
-      console.log('Worker response:', chatRes.data);
-const output = chatRes.data.output;
+      console.log('Image generation response:', genRes.data);
+      const imageResult = genRes.data.output;
 
-console.log('=== DEBUG VISUAL PROMPTS ===');
-console.log('Output object:', output);
-console.log('visual_prompts:', output?.visual_prompts);
-console.log('visual_prompt (old):', output?.visual_prompt);
-console.log('all_ideas:', output?.all_ideas);
-console.log('=== END DEBUG ===');
-
-if ((!output.visual_prompts || output.visual_prompts.length === 0) && output.all_ideas) {
-  console.log('Extracting visual prompts from all_ideas');
-  output.visual_prompts = output.all_ideas.map(idea => idea.visual).filter(v => v && v.trim() !== '');
-  console.log('Extracted visual_prompts:', output.visual_prompts);
-}
-
-
-if (output && output.visual_prompts && output.visual_prompts.length > 0) {
-  setMessages([...newHistory, { role: 'assistant', content: output.response }]);
-  setStatus(`Generating ${output.visual_prompts.length} high-resolution designs...`);
-
-  // Step B: Call the Serverless Manager for Image Generation
-  const genRes = await axios.post(`${API_BASE}/runsync`, {
-    input: {
-      type: "GEN_IMAGE",
-      visual_prompts: output.visual_prompts // Send ALL visual prompts
-    }
-  }, runpodConfig);
-
-  console.log('Image generation response:', genRes.data);
-
-  // Debug: Log the entire response structure
-  console.log('Full response structure:', JSON.stringify(genRes.data, null, 2));
-
-  // Result from Worker
-  if (genRes.data.output) {
-    const result = genRes.data.output;
-
-    if (result.images && Array.isArray(result.images) && result.images.length > 0) {
-      console.log('Setting generated images:', result.images);
-      setGeneratedImages(result.images);
-
-      // Update the message to show we have images
-      setMessages(prev => {
-        const newMessages = [...prev];
-        // Update the last message to include image count
-        if (newMessages.length > 0) {
-          const lastMsg = newMessages[newMessages.length - 1];
-          if (lastMsg.role === 'assistant') {
-            lastMsg.content = `I've created ${result.images.length} design${result.images.length > 1 ? 's' : ''} for you. Check them out below!`;
-          }
-        }
-        return newMessages;
-      });
-
-      setStatus('Designs generated!');
-
-      // Add a message about clicking to generate 3D
-      setTimeout(() => {
+      if (imageResult && imageResult.images && imageResult.images.length > 0) {
+        console.log('Setting generated images:', imageResult.images);
+        setGeneratedImages(imageResult.images);
+        setStatus(`✅ Generated ${imageResult.images.length} designs!`);
+        
+        // Update message to show images are ready
+        setTimeout(() => {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: `I've created ${imageResult.images.length} visual designs! Click on any design to generate a 3D printable model.` 
+          }]);
+        }, 500);
+        
+      } else {
+        console.error('No images generated:', imageResult);
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: "Click on any design to generate a 3D model!" 
+          content: "I created ideas but couldn't generate visual previews. Please try again." 
         }]);
-      }, 500);
-
+        setStatus('Image generation failed');
+      }
     } else {
-      console.error('No images in response:', result);
+      console.warn('No visual prompts in response:', output);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: "Generated ideas but couldn't create visual previews." 
+        content: "I have some ideas but couldn't create visual prompts. Please try a different description." 
       }]);
-      setStatus('No images generated');
+      setStatus('No visual prompts');
     }
-  } else {
-    console.error('No output in response:', genRes.data);
-    setMessages(prev => [...prev, { 
-      role: 'assistant', 
-      content: "Image generation failed. Please try again." 
-    }]);
-    setStatus('Generation failed');
-  }
-} else {
-  setMessages([...newHistory, {
-    role: 'assistant',
-    content: output?.response || "Let me think about that..."
-  }]);
-}
 
- catch (error) {
-      console.error("Worker Error:", error);
-      console.error("Error details:", error.response?.data);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: "Oops, something went wrong. Please try again!"
-      }]);
-      setStatus('Error occurred');
+  } catch (error) {
+    console.error("Worker Error:", error);
+    console.error("Error details:", error.response?.data);
+    
+    let errorMessage = "Oops, something went wrong. Please try again!";
+    if (error.response?.data?.output?.error) {
+      errorMessage = `Error: ${error.response.data.output.error}`;
     }
-    setLoading(false);
-  };
+    
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: errorMessage
+    }]);
+    setStatus('Error occurred');
+  }
+  
+  setLoading(false);
+};
+
 
 // 2. 3D RECONSTRUCTION FLOW - FIXED VERSION
 const handleSelectImage = async (imgUrl) => {
@@ -429,56 +406,56 @@ const handleSelectImage = async (imgUrl) => {
 
         {/* IMAGE GALLERY SECTION */}
         {generatedImages.length > 0 && (
-          <div className="absolute bottom-8 left-8 right-8 bg-white/80 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
-              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              {generatedImages.map((imgUrl, idx) => (
-                <div
-                  key={idx}
-                  className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300"
-                  onClick={() => handleSelectImage(imgUrl)}
-                >
-                  <img
-                    src={imgUrl}
-                    alt={`Design ${idx + 1}`}
-                    className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => {
-                      console.error('Image failed to load:', imgUrl);
-                      e.target.src = `https://placehold.co/400x300/94a3b8/white?text=Design+${idx + 1}`;
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <div className="text-white text-xs font-bold">Click to generate 3D</div>
-                    </div>
+  <div className="absolute bottom-8 left-8 right-8 bg-white/90 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
+      <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+        {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
+      </span>
+    </div>
+    <div className="grid grid-cols-3 gap-4">
+      {generatedImages.map((imgUrl, idx) => (
+        <div
+          key={idx}
+          className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300 bg-slate-100"
+          onClick={() => handleSelectImage(imgUrl)}
+        >
+          <div className="relative w-full h-48 overflow-hidden">
+            <img
+              src={imgUrl}
+              alt={`Design ${idx + 1}`}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={(e) => {
+                console.error('Image failed to load:', imgUrl);
+                e.target.style.display = 'none';
+                e.target.parentElement.innerHTML = `
+                  <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300">
+                    <div class="text-slate-500 text-sm font-bold mb-2">Design ${idx + 1}</div>
+                    <div class="text-slate-400 text-xs">Click to generate 3D</div>
                   </div>
-                  <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full">
-                    {idx + 1}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 text-center">
-              <p className="text-xs text-slate-500 font-medium">
-                Click any design to generate a 3D printable model
-              </p>
+                `;
+              }}
+              onLoad={() => console.log(`Image ${idx + 1} loaded successfully`)}
+            />
+          </div>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="absolute bottom-3 left-3 right-3">
+              <div className="text-white text-xs font-bold">Click to generate 3D</div>
             </div>
           </div>
-        )}
-
-        {/* PEDESTAL UI */}
-        {showPedestalUI && (
-          <PedestalControls
-            settings={pedestalSettings}
-            setSettings={setPedestalSettings}
-            onPrepare={handlePrepareGCode}
-          />
-        )}
+          <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full">
+            {idx + 1}
+          </div>
+        </div>
+      ))}
+    </div>
+    <div className="mt-4 text-center">
+      <p className="text-xs text-slate-500 font-medium">
+        Click any design to generate a 3D printable model
+      </p>
+    </div>
+  </div>
+)}
 
         {/* CONTROL BAR */}
         <div className="absolute top-8 left-8 right-8 flex items-center justify-between">
