@@ -49,69 +49,82 @@ export default function Home() {
   }, [messages]);
 
   // 1. CHAT & IMAGE GENERATION FLOW
-const sendMessage = async () => {
-  // ... existing code ...
-
-  try {
-    console.log('Sending request to Worker...');
+  const sendMessage = async () => {
+    if (!input || loading) return;
     
-    const chatRes = await axios.post(`${API_BASE}/runsync`, {
-      input: {
-        type: "CHAT",
-        message: userMsg
-      }
-    }, runpodConfig);
+    // Store the input value in a local variable BEFORE clearing it
+    const userMessage = input; // <-- FIX: Store in local variable
+    
+    const newHistory = [...messages, { role: 'user', content: userMessage }];
+    setMessages(newHistory);
+    setInput(''); // Clear input AFTER storing
+    setLoading(true);
+    setStatus('AI is thinking...');
 
-    console.log('Worker response data:', chatRes.data);
-    console.log('Worker output:', chatRes.data.output);
-
-    const output = chatRes.data.output;
-
-    if (output && output.visual_prompt) {
-      console.log('Visual prompt:', output.visual_prompt);
-      setMessages([...newHistory, { role: 'assistant', content: output.response }]);
-      setStatus('Generating high-resolution design...');
+    try {
+      console.log('Sending request to Worker...');
       
-      const genRes = await axios.post(`${API_BASE}/runsync`, {
+      // Step A: Call the Serverless Manager for Chat
+      const chatRes = await axios.post(`${API_BASE}/runsync`, {
         input: {
-          type: "GEN_IMAGE",
-          visual_prompt: output.visual_prompt
+          type: "CHAT",
+          message: userMessage // <-- Use the local variable
         }
       }, runpodConfig);
 
-      console.log('Image generation full response:', genRes.data);
-      console.log('Image generation output:', genRes.data.output);
+      console.log('Worker response:', chatRes.data);
 
-      if (genRes.data.output && genRes.data.output.images) {
-        console.log('Images array:', genRes.data.output.images);
-        setGeneratedImages(genRes.data.output.images);
+      const output = chatRes.data.output;
+
+      if (output && output.visual_prompt) {
+        setMessages([...newHistory, { role: 'assistant', content: output.response }]);
+        setStatus('Generating high-resolution design...');
+        
+        // Step B: Call the Serverless Manager for Image Generation
+        const genRes = await axios.post(`${API_BASE}/runsync`, {
+          input: {
+            type: "GEN_IMAGE",
+            visual_prompt: output.visual_prompt
+          }
+        }, runpodConfig);
+
+        console.log('Image generation response:', genRes.data);
+
+        // Result from Worker
+        if (genRes.data.output && genRes.data.output.images) {
+          setGeneratedImages(genRes.data.output.images);
+          setStatus('Designs generated!');
+        } else {
+          console.error('No images in response:', genRes.data);
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: "Generated some ideas but couldn't create visual previews." 
+          }]);
+        }
       } else {
-        console.error('No images in response. Full response:', genRes.data);
-        setMessages(prev => [...prev, { 
+        setMessages([...newHistory, { 
           role: 'assistant', 
-          content: "Image generation failed. Please try again." 
+          content: output?.response || "Let me think about that..." 
         }]);
       }
-    } else {
-      console.log('No visual prompt in response:', output);
-      setMessages([...newHistory, { role: 'assistant', content: output?.response || "Hmm, let me think..." }]);
+    } catch (error) {
+      console.error("Worker Error:", error);
+      console.error("Error details:", error.response?.data);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "Oops, something went wrong. Please try again!" 
+      }]);
+      setStatus('Error occurred');
     }
-  } catch (error) {
-    console.error("Full error:", error);
-    console.error("Error response:", error.response?.data);
-    setMessages(prev => [...prev, { 
-      role: 'assistant', 
-      content: "Error: " + (error.message || "Please try again.") 
-    }]);
-  }
-  setLoading(false);
-};
+    setLoading(false);
+  };
+
   // 2. 3D RECONSTRUCTION FLOW
   const handleSelectImage = async (imgUrl) => {
     setModelUrl(null);
     setShowPedestalUI(false);
     setLoading(true);
-    setStatus('Generating 3D Geometry (RTX 3090)...');
+    setStatus('Generating 3D Geometry...');
     setGeneratedImages([]);
 
     try {
@@ -127,7 +140,12 @@ const sendMessage = async () => {
       if (res.data.output && res.data.output.images) {
         // Find the GLB file in the returned list
         const glb = res.data.output.images.find(url => url.toLowerCase().endsWith('.glb'));
-        if (glb) setModelUrl(glb);
+        if (glb) {
+          setModelUrl(glb);
+          setStatus('3D model ready!');
+        } else {
+          setStatus('No 3D model found in response');
+        }
       }
     } catch (e) {
       console.error(e);
@@ -136,7 +154,7 @@ const sendMessage = async () => {
     setLoading(false);
   };
 
-  // 3. SLICING & PRICE FLOW
+  // 3. SLICING & PRICE FLOW (same as before)
   const handlePrepareGCode = async () => {
     if (!exporterRef.current) return;
     setStatus('Preparing Manufacturing Data...');
@@ -146,7 +164,7 @@ const sendMessage = async () => {
       // Step A: Export STL from browser
       const stlData = exporterRef.current.exportSTL();
       
-      // Step B: Convert Blob to Base64 (Standard for Serverless JSON)
+      // Step B: Convert Blob to Base64
       const blob = new Blob([stlData], { type: 'application/octet-stream' });
       const reader = new FileReader();
       reader.readAsDataURL(blob);
@@ -217,15 +235,19 @@ const sendMessage = async () => {
               }}
               placeholder="Design something unique..."
             />
-            <button onClick={sendMessage} className="absolute right-2 top-2 p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors shadow-lg">
+            <button 
+              onClick={sendMessage}
+              disabled={loading}
+              className="absolute right-2 top-2 p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               <Send size={18} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* MAIN WORKBENCH - Rest of your JSX remains the same */}
-      {/* ... rest of your JSX code ... */}
+      {/* MAIN WORKBENCH - Rest of your JSX */}
+      {/* ... keep the rest of your JSX the same ... */}
     </div>
   );
 }
