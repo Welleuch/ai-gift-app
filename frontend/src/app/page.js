@@ -73,107 +73,94 @@ export default function Home() {
       }, runpodConfig);
 
       console.log('Worker response:', chatRes.data);
+const output = chatRes.data.output;
 
-      const output = chatRes.data.output;
+console.log('=== DEBUG VISUAL PROMPTS ===');
+console.log('Output object:', output);
+console.log('visual_prompts:', output?.visual_prompts);
+console.log('visual_prompt (old):', output?.visual_prompt);
+console.log('all_ideas:', output?.all_ideas);
+console.log('=== END DEBUG ===');
 
-     if (output && output.visual_prompts) {
+if ((!output.visual_prompts || output.visual_prompts.length === 0) && output.all_ideas) {
+  console.log('Extracting visual prompts from all_ideas');
+  output.visual_prompts = output.all_ideas.map(idea => idea.visual).filter(v => v && v.trim() !== '');
+  console.log('Extracted visual_prompts:', output.visual_prompts);
+}
+
+
+if (output && output.visual_prompts && output.visual_prompts.length > 0) {
   setMessages([...newHistory, { role: 'assistant', content: output.response }]);
-  setStatus('Generating high-resolution designs...');
+  setStatus(`Generating ${output.visual_prompts.length} high-resolution designs...`);
 
   // Step B: Call the Serverless Manager for Image Generation
-  setStatus('Generating high-resolution designs...');
-
   const genRes = await axios.post(`${API_BASE}/runsync`, {
     input: {
       type: "GEN_IMAGE",
-      visual_prompts: output.visual_prompts // Send array, not single prompt
+      visual_prompts: output.visual_prompts // Send ALL visual prompts
     }
   }, runpodConfig);
 
+  console.log('Image generation response:', genRes.data);
 
-        console.log('Image generation response:', genRes.data);
+  // Debug: Log the entire response structure
+  console.log('Full response structure:', JSON.stringify(genRes.data, null, 2));
 
-        // Debug: Log the entire response structure
-        console.log('Full response structure:', JSON.stringify(genRes.data, null, 2));
+  // Result from Worker
+  if (genRes.data.output) {
+    const result = genRes.data.output;
 
-        // Result from Worker - FIXED: Check multiple response formats
-        if (genRes.data.output) {
-          const result = genRes.data.output;
+    if (result.images && Array.isArray(result.images) && result.images.length > 0) {
+      console.log('Setting generated images:', result.images);
+      setGeneratedImages(result.images);
 
-          // Check for images in different possible formats
-          let images = [];
-
-          if (result.images && Array.isArray(result.images)) {
-            // Format 1: Direct images array
-            images = result.images;
-            console.log('Found images array in output.images:', images);
+      // Update the message to show we have images
+      setMessages(prev => {
+        const newMessages = [...prev];
+        // Update the last message to include image count
+        if (newMessages.length > 0) {
+          const lastMsg = newMessages[newMessages.length - 1];
+          if (lastMsg.role === 'assistant') {
+            lastMsg.content = `I've created ${result.images.length} design${result.images.length > 1 ? 's' : ''} for you. Check them out below!`;
           }
-          else if (result.status === 'success' && result.image_url) {
-            // Format 2: Single image_url
-            images = [result.image_url];
-            console.log('Found single image_url:', result.image_url);
-          }
-          else if (result.output && result.output.image_url) {
-            // Format 3: Nested image_url
-            images = [result.output.image_url];
-            console.log('Found nested image_url:', result.output.image_url);
-          }
-          else if (result.image_url) {
-            // Format 4: Direct image_url in output
-            images = [result.image_url];
-            console.log('Found direct image_url in output:', result.image_url);
-          }
-
-          if (images.length > 0) {
-            console.log('Setting generated images:', images);
-            setGeneratedImages(images);
-
-            // Update the message to show we have images
-            setMessages(prev => {
-              const newMessages = [...prev];
-              // Update the last message to include image count
-              if (newMessages.length > 0) {
-                const lastMsg = newMessages[newMessages.length - 1];
-                if (lastMsg.role === 'assistant') {
-                  lastMsg.content = `I've created ${images.length} design${images.length > 1 ? 's' : ''} for you. Check them out below!`;
-                }
-              }
-              return newMessages;
-            });
-
-            setStatus('Designs generated!');
-
-            // Add a message about clicking to generate 3D
-            setTimeout(() => {
-              setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: "Click on any design to generate a 3D model!"
-              }]);
-            }, 500);
-
-          } else {
-            console.error('No images found in response. Response was:', result);
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: "Generated ideas but couldn't create visual previews. Check the console for details."
-            }]);
-            setStatus('No images generated');
-          }
-        } else {
-          console.error('No output in response:', genRes.data);
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: "Image generation failed. Please try again."
-          }]);
-          setStatus('Generation failed');
         }
-      } else {
-        setMessages([...newHistory, {
-          role: 'assistant',
-          content: output?.response || "Let me think about that..."
+        return newMessages;
+      });
+
+      setStatus('Designs generated!');
+
+      // Add a message about clicking to generate 3D
+      setTimeout(() => {
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: "Click on any design to generate a 3D model!" 
         }]);
-      }
-    } catch (error) {
+      }, 500);
+
+    } else {
+      console.error('No images in response:', result);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "Generated ideas but couldn't create visual previews." 
+      }]);
+      setStatus('No images generated');
+    }
+  } else {
+    console.error('No output in response:', genRes.data);
+    setMessages(prev => [...prev, { 
+      role: 'assistant', 
+      content: "Image generation failed. Please try again." 
+    }]);
+    setStatus('Generation failed');
+  }
+} else {
+  setMessages([...newHistory, {
+    role: 'assistant',
+    content: output?.response || "Let me think about that..."
+  }]);
+}
+
+ catch (error) {
       console.error("Worker Error:", error);
       console.error("Error details:", error.response?.data);
       setMessages(prev => [...prev, {
@@ -190,7 +177,7 @@ const handleSelectImage = async (imgUrl) => {
   setModelUrl(null);
   setShowPedestalUI(false);
   setLoading(true);
-  setStatus('Generating 3D Geometry...');
+  setStatus('Generating 3D Geometry... (this takes 1-2 minutes)');
   setGeneratedImages([]);
 
   console.log('Generating 3D model from image:', imgUrl);
@@ -203,30 +190,39 @@ const handleSelectImage = async (imgUrl) => {
       }
     }, runpodConfig);
 
-    console.log('3D generation response:', res.data);
+    console.log('3D generation full response:', JSON.stringify(res.data, null, 2));
 
-    // Check multiple response formats
     if (res.data.output) {
       const result = res.data.output;
+      console.log('3D generation result:', result);
+      
+      // Check for mesh URL in various formats
       let meshUrl = null;
       
-      // Format 1: Direct mesh_url
       if (result.mesh_url) {
+        // Format 1: Direct mesh_url
         meshUrl = result.mesh_url;
         console.log('Found mesh_url:', meshUrl);
+      } 
+      else if (result.status === 'success' && result.mesh_url) {
+        // Format 2: In status success
+        meshUrl = result.mesh_url;
+        console.log('Found mesh_url in success:', meshUrl);
       }
-      // Format 2: images array with GLB
+      else if (result.local_path && result.local_path.endsWith('.glb')) {
+        // Format 3: Local path
+        meshUrl = result.local_path;
+        console.log('Found local_path:', meshUrl);
+      }
       else if (result.images && Array.isArray(result.images)) {
-        const glb = result.images.find(url => url.toLowerCase().endsWith('.glb'));
+        // Format 4: Look for GLB in images array
+        const glb = result.images.find(url => 
+          typeof url === 'string' && url.toLowerCase().endsWith('.glb')
+        );
         if (glb) {
           meshUrl = glb;
           console.log('Found GLB in images array:', meshUrl);
         }
-      }
-      // Format 3: Nested in output
-      else if (result.output && result.output.mesh_url) {
-        meshUrl = result.output.mesh_url;
-        console.log('Found nested mesh_url:', meshUrl);
       }
       
       if (meshUrl) {
@@ -234,22 +230,64 @@ const handleSelectImage = async (imgUrl) => {
         setModelUrl(meshUrl);
         setStatus('3D model ready! Click "Print Settings" to customize.');
         
-        // Auto-show pedestal UI
+        // Auto-show pedestal UI after a delay
         setTimeout(() => {
           setShowPedestalUI(true);
-        }, 1000);
+        }, 1500);
+        
       } else {
-        console.error('No GLB model found in response:', result);
-        setStatus('No 3D model found in response');
+        console.error('No GLB model found in response. Full response:', result);
+        
+        // Try to extract any URL that might be a mesh
+        const allUrls = [];
+        const extractUrls = (obj) => {
+          if (typeof obj === 'string' && obj.includes('http')) {
+            allUrls.push(obj);
+          } else if (Array.isArray(obj)) {
+            obj.forEach(item => extractUrls(item));
+          } else if (typeof obj === 'object' && obj !== null) {
+            Object.values(obj).forEach(value => extractUrls(value));
+          }
+        };
+        extractUrls(result);
+        
+        const possibleMeshUrls = allUrls.filter(url => 
+          url.toLowerCase().endsWith('.glb') || 
+          url.includes('models/') || 
+          url.includes('ComfyUI')
+        );
+        
+        if (possibleMeshUrls.length > 0) {
+          console.log('Found possible mesh URLs:', possibleMeshUrls);
+          setModelUrl(possibleMeshUrls[0]);
+          setStatus('3D model found! Loading...');
+          setTimeout(() => {
+            setShowPedestalUI(true);
+          }, 1500);
+        } else {
+          setStatus('No 3D model found in response');
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: "3D generation completed but couldn't find the model URL. Check console for details."
+          }]);
+        }
       }
     } else {
       console.error('No output in 3D response:', res.data);
-      setStatus('3D generation failed');
+      setStatus('3D generation failed - no output');
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "3D generation failed. Please try again with a different image."
+      }]);
     }
   } catch (e) {
     console.error('3D Generation Error:', e);
-    console.error('Error details:', e.response?.data);
+    console.error('Error response:', e.response?.data);
     setStatus('3D Generation Failed');
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: "3D generation error: " + (e.message || 'Unknown error')
+    }]);
   }
   setLoading(false);
 };
