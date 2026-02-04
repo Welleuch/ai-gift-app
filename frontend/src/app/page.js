@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
-import { Send, Loader2, Box, Sparkles, Cpu, Layers, Download, CheckCircle2 } from 'lucide-react';
+import { Send, Loader2, Box, Sparkles, Cpu, Layers, Download, CheckCircle2, Settings } from 'lucide-react';
 import PedestalControls from '../components/PedestalControls';
 
 // --- CONFIGURATION ---
