@@ -76,19 +76,20 @@ export default function Home() {
 
       const output = chatRes.data.output;
 
-      if (output && output.visual_prompt) {
-        setMessages([...newHistory, { role: 'assistant', content: output.response }]);
-        setStatus('Generating high-resolution design...');
+     if (output && output.visual_prompts) {
+  setMessages([...newHistory, { role: 'assistant', content: output.response }]);
+  setStatus('Generating high-resolution designs...');
 
-        // Step B: Call the Serverless Manager for Image Generation
-        setStatus('Generating high-resolution design...');
+  // Step B: Call the Serverless Manager for Image Generation
+  setStatus('Generating high-resolution designs...');
 
-        const genRes = await axios.post(`${API_BASE}/runsync`, {
-          input: {
-            type: "GEN_IMAGE",
-            visual_prompt: output.visual_prompt
-          }
-        }, runpodConfig);
+  const genRes = await axios.post(`${API_BASE}/runsync`, {
+    input: {
+      type: "GEN_IMAGE",
+      visual_prompts: output.visual_prompts // Send array, not single prompt
+    }
+  }, runpodConfig);
+
 
         console.log('Image generation response:', genRes.data);
 
@@ -184,40 +185,74 @@ export default function Home() {
     setLoading(false);
   };
 
-  // 2. 3D RECONSTRUCTION FLOW
-  const handleSelectImage = async (imgUrl) => {
-    setModelUrl(null);
-    setShowPedestalUI(false);
-    setLoading(true);
-    setStatus('Generating 3D Geometry...');
-    setGeneratedImages([]);
+// 2. 3D RECONSTRUCTION FLOW - FIXED VERSION
+const handleSelectImage = async (imgUrl) => {
+  setModelUrl(null);
+  setShowPedestalUI(false);
+  setLoading(true);
+  setStatus('Generating 3D Geometry...');
+  setGeneratedImages([]);
 
-    try {
-      const res = await axios.post(`${API_BASE}/runsync`, {
-        input: {
-          type: "GEN_3D",
-          image_url: imgUrl
-        }
-      }, runpodConfig);
+  console.log('Generating 3D model from image:', imgUrl);
 
-      console.log('3D generation response:', res.data);
+  try {
+    const res = await axios.post(`${API_BASE}/runsync`, {
+      input: {
+        type: "GEN_3D",
+        image_url: imgUrl
+      }
+    }, runpodConfig);
 
-      if (res.data.output && res.data.output.images) {
-        // Find the GLB file in the returned list
-        const glb = res.data.output.images.find(url => url.toLowerCase().endsWith('.glb'));
+    console.log('3D generation response:', res.data);
+
+    // Check multiple response formats
+    if (res.data.output) {
+      const result = res.data.output;
+      let meshUrl = null;
+      
+      // Format 1: Direct mesh_url
+      if (result.mesh_url) {
+        meshUrl = result.mesh_url;
+        console.log('Found mesh_url:', meshUrl);
+      }
+      // Format 2: images array with GLB
+      else if (result.images && Array.isArray(result.images)) {
+        const glb = result.images.find(url => url.toLowerCase().endsWith('.glb'));
         if (glb) {
-          setModelUrl(glb);
-          setStatus('3D model ready!');
-        } else {
-          setStatus('No 3D model found in response');
+          meshUrl = glb;
+          console.log('Found GLB in images array:', meshUrl);
         }
       }
-    } catch (e) {
-      console.error(e);
-      setStatus('3D Generation Failed');
+      // Format 3: Nested in output
+      else if (result.output && result.output.mesh_url) {
+        meshUrl = result.output.mesh_url;
+        console.log('Found nested mesh_url:', meshUrl);
+      }
+      
+      if (meshUrl) {
+        console.log('Setting model URL:', meshUrl);
+        setModelUrl(meshUrl);
+        setStatus('3D model ready! Click "Print Settings" to customize.');
+        
+        // Auto-show pedestal UI
+        setTimeout(() => {
+          setShowPedestalUI(true);
+        }, 1000);
+      } else {
+        console.error('No GLB model found in response:', result);
+        setStatus('No 3D model found in response');
+      }
+    } else {
+      console.error('No output in 3D response:', res.data);
+      setStatus('3D generation failed');
     }
-    setLoading(false);
-  };
+  } catch (e) {
+    console.error('3D Generation Error:', e);
+    console.error('Error details:', e.response?.data);
+    setStatus('3D Generation Failed');
+  }
+  setLoading(false);
+};
 
   // 3. SLICING & PRICE FLOW (same as before)
   const handlePrepareGCode = async () => {
@@ -314,28 +349,45 @@ export default function Home() {
       <div className="flex-1 relative">
         {/* 3D VIEWER */}
         <div className="absolute inset-0">
-          {modelUrl ? (
-            <ModelViewer 
-              url={modelUrl} 
-              pedestalSettings={pedestalSettings} 
-              exporterRef={exporterRef} 
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="text-center space-y-6">
-                <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-100 to-slate-100 rounded-3xl flex items-center justify-center shadow-xl">
-                  <Box className="text-blue-400" size={40} />
-                </div>
-                <div>
-                  <h3 className="font-black text-slate-800 text-lg">Ready for 3D Creation</h3>
-                  <p className="text-slate-500 text-sm max-w-sm mx-auto mt-2">
-                    Describe your gift idea and I'll generate custom 3D designs for you
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+  {modelUrl ? (
+    <ModelViewer 
+      url={modelUrl} 
+      pedestalSettings={pedestalSettings} 
+      exporterRef={exporterRef} 
+    />
+  ) : loading && status.includes('3D') ? (
+    <div className="w-full h-full flex items-center justify-center">
+      <div className="text-center space-y-6">
+        <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-100 to-slate-100 rounded-3xl flex items-center justify-center shadow-xl animate-pulse">
+          <Layers className="text-blue-400" size={40} />
         </div>
+        <div>
+          <h3 className="font-black text-slate-800 text-lg">Generating 3D Model</h3>
+          <p className="text-slate-500 text-sm max-w-sm mx-auto mt-2">
+            {status}
+          </p>
+          <p className="text-slate-400 text-xs mt-4">
+            This may take 1-2 minutes...
+          </p>
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className="w-full h-full flex items-center justify-center">
+      <div className="text-center space-y-6">
+        <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-100 to-slate-100 rounded-3xl flex items-center justify-center shadow-xl">
+          <Box className="text-blue-400" size={40} />
+        </div>
+        <div>
+          <h3 className="font-black text-slate-800 text-lg">Ready for 3D Creation</h3>
+          <p className="text-slate-500 text-sm max-w-sm mx-auto mt-2">
+            Describe your gift idea and I'll generate custom 3D designs for you
+          </p>
+        </div>
+      </div>
+    </div>
+  )}
+</div>
 
         {/* IMAGE GALLERY SECTION */}
         {generatedImages.length > 0 && (
