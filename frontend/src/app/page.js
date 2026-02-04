@@ -16,7 +16,7 @@ const runpodConfig = {
   }
 };
 
-const ModelViewer = dynamic(() => import('../components/ModelViewer'), { 
+const ModelViewer = dynamic(() => import('../components/ModelViewer'), {
   ssr: false,
   loading: () => <div className="text-slate-400 animate-pulse font-bold text-xs uppercase tracking-widest">Initializing 3D Engine...</div>
 });
@@ -33,7 +33,7 @@ export default function Home() {
   const [status, setStatus] = useState('');
   const [generatedImages, setGeneratedImages] = useState([]);
   const [modelUrl, setModelUrl] = useState(null);
-  
+
   const exporterRef = useRef(null);
   const [showPedestalUI, setShowPedestalUI] = useState(false);
   const [orderSummary, setOrderSummary] = useState(null);
@@ -51,10 +51,10 @@ export default function Home() {
   // 1. CHAT & IMAGE GENERATION FLOW
   const sendMessage = async () => {
     if (!input || loading) return;
-    
+
     // Store the input value in a local variable BEFORE clearing it
     const userMessage = input; // <-- FIX: Store in local variable
-    
+
     const newHistory = [...messages, { role: 'user', content: userMessage }];
     setMessages(newHistory);
     setInput(''); // Clear input AFTER storing
@@ -63,7 +63,7 @@ export default function Home() {
 
     try {
       console.log('Sending request to Worker...');
-      
+
       // Step A: Call the Serverless Manager for Chat
       const chatRes = await axios.post(`${API_BASE}/runsync`, {
         input: {
@@ -79,8 +79,10 @@ export default function Home() {
       if (output && output.visual_prompt) {
         setMessages([...newHistory, { role: 'assistant', content: output.response }]);
         setStatus('Generating high-resolution design...');
-        
+
         // Step B: Call the Serverless Manager for Image Generation
+        setStatus('Generating high-resolution design...');
+
         const genRes = await axios.post(`${API_BASE}/runsync`, {
           input: {
             type: "GEN_IMAGE",
@@ -90,29 +92,92 @@ export default function Home() {
 
         console.log('Image generation response:', genRes.data);
 
-        // Result from Worker
-        if (genRes.data.output && genRes.data.output.images) {
-          setGeneratedImages(genRes.data.output.images);
-          setStatus('Designs generated!');
+        // Debug: Log the entire response structure
+        console.log('Full response structure:', JSON.stringify(genRes.data, null, 2));
+
+        // Result from Worker - FIXED: Check multiple response formats
+        if (genRes.data.output) {
+          const result = genRes.data.output;
+
+          // Check for images in different possible formats
+          let images = [];
+
+          if (result.images && Array.isArray(result.images)) {
+            // Format 1: Direct images array
+            images = result.images;
+            console.log('Found images array in output.images:', images);
+          }
+          else if (result.status === 'success' && result.image_url) {
+            // Format 2: Single image_url
+            images = [result.image_url];
+            console.log('Found single image_url:', result.image_url);
+          }
+          else if (result.output && result.output.image_url) {
+            // Format 3: Nested image_url
+            images = [result.output.image_url];
+            console.log('Found nested image_url:', result.output.image_url);
+          }
+          else if (result.image_url) {
+            // Format 4: Direct image_url in output
+            images = [result.image_url];
+            console.log('Found direct image_url in output:', result.image_url);
+          }
+
+          if (images.length > 0) {
+            console.log('Setting generated images:', images);
+            setGeneratedImages(images);
+
+            // Update the message to show we have images
+            setMessages(prev => {
+              const newMessages = [...prev];
+              // Update the last message to include image count
+              if (newMessages.length > 0) {
+                const lastMsg = newMessages[newMessages.length - 1];
+                if (lastMsg.role === 'assistant') {
+                  lastMsg.content = `I've created ${images.length} design${images.length > 1 ? 's' : ''} for you. Check them out below!`;
+                }
+              }
+              return newMessages;
+            });
+
+            setStatus('Designs generated!');
+
+            // Add a message about clicking to generate 3D
+            setTimeout(() => {
+              setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: "Click on any design to generate a 3D model!"
+              }]);
+            }, 500);
+
+          } else {
+            console.error('No images found in response. Response was:', result);
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: "Generated ideas but couldn't create visual previews. Check the console for details."
+            }]);
+            setStatus('No images generated');
+          }
         } else {
-          console.error('No images in response:', genRes.data);
-          setMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: "Generated some ideas but couldn't create visual previews." 
+          console.error('No output in response:', genRes.data);
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: "Image generation failed. Please try again."
           }]);
+          setStatus('Generation failed');
         }
       } else {
-        setMessages([...newHistory, { 
-          role: 'assistant', 
-          content: output?.response || "Let me think about that..." 
+        setMessages([...newHistory, {
+          role: 'assistant',
+          content: output?.response || "Let me think about that..."
         }]);
       }
     } catch (error) {
       console.error("Worker Error:", error);
       console.error("Error details:", error.response?.data);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: "Oops, something went wrong. Please try again!" 
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "Oops, something went wrong. Please try again!"
       }]);
       setStatus('Error occurred');
     }
@@ -163,12 +228,12 @@ export default function Home() {
     try {
       // Step A: Export STL from browser
       const stlData = exporterRef.current.exportSTL();
-      
+
       // Step B: Convert Blob to Base64
       const blob = new Blob([stlData], { type: 'application/octet-stream' });
       const reader = new FileReader();
       reader.readAsDataURL(blob);
-      
+
       reader.onloadend = async () => {
         const base64data = reader.result.split(',')[1];
 
@@ -205,28 +270,27 @@ export default function Home() {
           <div className="bg-blue-500 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-500/20"><Sparkles size={20} /></div>
           <h1 className="text-white font-black text-xl tracking-tighter">GiftAI Studio</h1>
         </div>
-        
+
         <div ref={scrollRef} className="flex-1 p-6 overflow-y-auto space-y-6">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-              <div className={`p-4 rounded-[24px] max-w-[85%] text-sm leading-relaxed shadow-sm font-medium ${
-                m.role === 'user' ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-slate-800 text-slate-200 border border-slate-700'
-              }`}>{m.content}</div>
+              <div className={`p-4 rounded-[24px] max-w-[85%] text-sm leading-relaxed shadow-sm font-medium ${m.role === 'user' ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-slate-800 text-slate-200 border border-slate-700'
+                }`}>{m.content}</div>
             </div>
           ))}
           {loading && (
             <div className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse flex items-center gap-3 px-2">
-              <Loader2 className="animate-spin" size={14}/> {status}
+              <Loader2 className="animate-spin" size={14} /> {status}
             </div>
           )}
         </div>
-        
+
         <div className="p-6 bg-slate-900 border-t border-slate-800">
           <div className="relative">
-            <input 
+            <input
               className="w-full bg-slate-800 border border-slate-700 rounded-2xl py-4 pl-5 pr-14 text-white text-sm focus:ring-4 focus:ring-blue-500/20 outline-none transition-all placeholder:text-slate-500 font-bold"
-              value={input} 
-              onChange={(e) => setInput(e.target.value)} 
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -235,7 +299,7 @@ export default function Home() {
               }}
               placeholder="Design something unique..."
             />
-            <button 
+            <button
               onClick={sendMessage}
               disabled={loading}
               className="absolute right-2 top-2 p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
@@ -249,5 +313,51 @@ export default function Home() {
       {/* MAIN WORKBENCH - Rest of your JSX */}
       {/* ... keep the rest of your JSX the same ... */}
     </div>
+
   );
+  {/* IMAGE GALLERY SECTION */ }
+  {
+    generatedImages.length > 0 && (
+      <div className="absolute bottom-8 left-8 right-8 bg-white/80 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
+          <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+            {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {generatedImages.map((imgUrl, idx) => (
+            <div
+              key={idx}
+              className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300"
+              onClick={() => handleSelectImage(imgUrl)}
+            >
+              <img
+                src={imgUrl}
+                alt={`Design ${idx + 1}`}
+                className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                  console.error('Image failed to load:', imgUrl);
+                  e.target.src = `https://placehold.co/400x300/94a3b8/white?text=Design+${idx + 1}`;
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="absolute bottom-3 left-3 right-3">
+                  <div className="text-white text-xs font-bold">Click to generate 3D</div>
+                </div>
+              </div>
+              <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full">
+                {idx + 1}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 text-center">
+          <p className="text-xs text-slate-500 font-medium">
+            Click any design to generate a 3D printable model
+          </p>
+        </div>
+      </div>
+    )
+  }
 }
