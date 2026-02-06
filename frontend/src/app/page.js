@@ -403,7 +403,7 @@ const handleSelectImage = async (imgUrl) => {
           </div>
         )}
 
-        {/* CONTROL BAR */}
+      {/* CONTROL BAR */}
         <div className="absolute top-8 left-8 right-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -436,7 +436,7 @@ const handleSelectImage = async (imgUrl) => {
           </div>
         </div>
 
-{/* STATUS INDICATOR - ADD THIS PART */}
+        {/* STATUS INDICATOR - This was missing and caused the build error */}
         {status && !loading && (
           <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg border border-white/50 z-50">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
@@ -445,9 +445,9 @@ const handleSelectImage = async (imgUrl) => {
             </div>
           </div>
         )}
-      </div> {/* Closes MAIN WORKBENCH */}
+      </div> {/* This closes the MAIN WORKBENCH div */}
 
-      {/* PEDESTAL UI OVERLAY */}
+      {/* PEDESTAL UI OVERLAY - This handles your 3D customization menu */}
       {showPedestalUI && (
         <PedestalControls 
           settings={pedestalSettings} 
@@ -455,6 +455,6 @@ const handleSelectImage = async (imgUrl) => {
           onPrepare={() => setShowPedestalUI(false)}
         />
       )}
-    </div>
+    </div> // This closes the Outer Flex Container
   );
 }
