@@ -52,99 +52,40 @@ export default function Home() {
   const sendMessage = async () => {
   if (!input || loading) return;
 
-  // Store the input value in a local variable BEFORE clearing it
   const userMessage = input;
   const newHistory = [...messages, { role: 'user', content: userMessage }];
   setMessages(newHistory);
   setInput('');
   setLoading(true);
   setStatus('AI is thinking...');
-  setGeneratedImages([]); // Clear any previous images
-  setModelUrl(null); // Clear any previous model
+  setGeneratedImages([]); 
 
   try {
-    console.log('Sending request to Worker for chat...');
-
-    // Step A: Call the Serverless Manager for Chat
-    const chatRes = await axios.post(`${API_BASE}/runsync`, {
-      input: {
+    // We send ONE request. The Worker will do BOTH: Idea + Image
+    const res = await axios.post(`${API_BASE}`, {
         type: "CHAT",
         message: userMessage
-      }
     }, runpodConfig);
 
-    console.log('Worker response:', chatRes.data);
-    const output = chatRes.data.output;
+    const output = res.data.output;
 
-    if (!output) {
-      throw new Error('No output from chat');
-    }
-
-    // Show the response from AI
-    setMessages([...newHistory, { role: 'assistant', content: output.response }]);
-    
-    // Check if we have visual prompts
-    if (output.visual_prompts && output.visual_prompts.length > 0) {
-      console.log('Visual prompts found:', output.visual_prompts);
-      setStatus(`Generating ${output.visual_prompts.length} high-resolution designs...`);
-      
-      // Step B: Generate images for each visual prompt
-      const genRes = await axios.post(`${API_BASE}/runsync`, {
-        input: {
-          type: "GEN_IMAGE",
-          visual_prompts: output.visual_prompts
-        }
-      }, runpodConfig);
-
-      console.log('Image generation response:', genRes.data);
-      const imageResult = genRes.data.output;
-
-      if (imageResult && imageResult.images && imageResult.images.length > 0) {
-        console.log('Setting generated images:', imageResult.images);
-        setGeneratedImages(imageResult.images);
-        setStatus(`✅ Generated ${imageResult.images.length} designs!`);
-        
-        // Update message to show images are ready
-        setTimeout(() => {
-          setMessages(prev => [...prev, { 
-            role: 'assistant', 
-            content: `I've created ${imageResult.images.length} visual designs! Click on any design to generate a 3D printable model.` 
-          }]);
-        }, 500);
-        
-      } else {
-        console.error('No images generated:', imageResult);
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: "I created ideas but couldn't generate visual previews. Please try again." 
-        }]);
-        setStatus('Image generation failed');
-      }
-    } else {
-      console.warn('No visual prompts in response:', output);
-      setMessages(prev => [...prev, { 
+    if (output.status === 'success' && output.ideas) {
+      // The Worker now returns a list of {name, image_url}
+      setGeneratedImages(output.ideas);
+      setMessages([...newHistory, { 
         role: 'assistant', 
-        content: "I have some ideas but couldn't create visual prompts. Please try a different description." 
+        content: `I've designed ${output.ideas.length} custom gifts for you! Click one to generate the 3D model.` 
       }]);
-      setStatus('No visual prompts');
+      setStatus('Ready!');
+    } else {
+      throw new Error(output.message || 'Generation failed');
     }
 
   } catch (error) {
     console.error("Worker Error:", error);
-    console.error("Error details:", error.response?.data);
-    
-    let errorMessage = "Oops, something went wrong. Please try again!";
-    if (error.response?.data?.output?.error) {
-      errorMessage = `Error: ${error.response.data.output.error}`;
-    }
-    
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: errorMessage
-    }]);
-    setStatus('Error occurred');
+    setMessages(prev => [...prev, { role: 'assistant', content: "Something went wrong. Please try again." }]);
+    setStatus('Error');
   }
-  
   setLoading(false);
 };
 
@@ -404,74 +345,76 @@ const handleSelectImage = async (imgUrl) => {
   )}
 </div>
 
-        {/* IMAGE GALLERY SECTION */}
+    {/* IMAGE GALLERY SECTION */}
         {generatedImages.length > 0 && (
-  <div className="absolute bottom-8 left-8 right-8 bg-white/90 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
-      <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-        {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
-      </span>
-    </div>
-    <div className="grid grid-cols-3 gap-4">
-      {generatedImages.map((imgUrl, idx) => (
-        <div
-          key={idx}
-          className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300 bg-slate-100"
-          onClick={() => handleSelectImage(imgUrl)}
-        >
-          <div className="relative w-full h-48 overflow-hidden">
-            <img
-              src={imgUrl}
-              alt={`Design ${idx + 1}`}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              onError={(e) => {
-  console.error('Image failed to load:', imgUrl);
-  e.target.style.display = 'none';
-  e.target.parentElement.innerHTML = `
-    <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 p-4">
-      <div class="text-slate-700 text-sm font-bold mb-2 text-center">Image Failed to Load</div>
-      <div class="text-slate-500 text-xs text-center">Prompt might be invalid</div>
-      <button onclick="location.reload()" class="mt-3 px-3 py-1 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600">
-        Try Again
-      </button>
-    </div>
-  `;
-}}
-              onLoad={() => console.log(`Image ${idx + 1} loaded successfully`)}
-            />
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <div className="absolute bottom-3 left-3 right-3">
-              <div className="text-white text-xs font-bold">Click to generate 3D</div>
+          <div className="absolute bottom-8 left-8 right-8 bg-white/90 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {generatedImages.map((idea, idx) => (
+                <div
+                  key={idx}
+                  className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300 bg-slate-100 shadow-sm"
+                  onClick={() => handleSelectImage(idea.image_url)}
+                >
+                  <div className="relative w-full h-48 overflow-hidden">
+                    <img
+                      src={idea.image_url}
+                      alt={idea.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        console.error('Image failed to load:', idea.image_url);
+                        e.target.style.display = 'none';
+                        e.target.parentElement.innerHTML = `
+                          <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 p-4">
+                            <div class="text-slate-700 text-sm font-bold mb-2 text-center">Image Failed</div>
+                            <div class="text-slate-500 text-xs text-center">Prompt might be invalid</div>
+                          </div>
+                        `;
+                      }}
+                    />
+                  </div>
+
+                  {/* Name Overlay using the clean data from Cloudflare AI */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+                    <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                      {idea.name}
+                    </p>
+                    <p className="text-white text-xs font-bold">
+                      Click to generate 3D
+                    </p>
+                  </div>
+
+                  <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-black px-2 py-1 rounded-full">
+                    {idx + 1}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 text-center">
+              <p className="text-xs text-slate-500 font-medium">
+                Select a design to begin the 3D conversion process
+              </p>
             </div>
           </div>
-          <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full">
-            {idx + 1}
-          </div>
-        </div>
-      ))}
-    </div>
-    <div className="mt-4 text-center">
-      <p className="text-xs text-slate-500 font-medium">
-        Click any design to generate a 3D printable model
-      </p>
-    </div>
-  </div>
-)}
+        )}
 
         {/* CONTROL BAR */}
         <div className="absolute top-8 left-8 right-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowPedestalUI(!showPedestalUI)}
-              className="glass-card px-6 py-3 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all"
+              className="glass-card px-6 py-3 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all bg-white/50 border border-white"
             >
-              <Settings size={18} className="inline mr-2" />
+              <Settings size={18} className="inline mr-2 text-slate-700" />
               Print Settings
             </button>
             {orderSummary && (
-              <div className="glass-card px-6 py-3 rounded-2xl">
+              <div className="glass-card px-6 py-3 rounded-2xl bg-white/50 border border-white">
                 <div className="text-sm font-bold text-slate-800">
                   Est. Print: <span className="text-green-600">{orderSummary.print_time}</span> • 
                   Weight: <span className="text-blue-600">{orderSummary.weight}</span> • 
@@ -484,7 +427,7 @@ const handleSelectImage = async (imgUrl) => {
             {modelUrl && (
               <button
                 onClick={handlePrepareGCode}
-                className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black transition-all flex items-center gap-2"
+                className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black transition-all flex items-center gap-2 shadow-xl"
               >
                 <Download size={18} />
                 Order Print
@@ -492,17 +435,3 @@ const handleSelectImage = async (imgUrl) => {
             )}
           </div>
         </div>
-
-        {/* STATUS INDICATOR */}
-        {status && !loading && (
-          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg border border-white/50">
-            <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-              <CheckCircle2 size={16} className="text-green-500" />
-              {status}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
