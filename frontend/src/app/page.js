@@ -435,3 +435,26 @@ const handleSelectImage = async (imgUrl) => {
             )}
           </div>
         </div>
+
+{/* STATUS INDICATOR - ADD THIS PART */}
+        {status && !loading && (
+          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg border border-white/50 z-50">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+              <CheckCircle2 size={16} className="text-green-500" />
+              {status}
+            </div>
+          </div>
+        )}
+      </div> {/* Closes MAIN WORKBENCH */}
+
+      {/* PEDESTAL UI OVERLAY */}
+      {showPedestalUI && (
+        <PedestalControls 
+          settings={pedestalSettings} 
+          setSettings={setPedestalSettings}
+          onPrepare={() => setShowPedestalUI(false)}
+        />
+      )}
+    </div>
+  );
+}
