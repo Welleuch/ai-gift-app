@@ -102,112 +102,36 @@ const handleSelectImage = async (imgUrl) => {
   setGeneratedImages([]);
 
   console.log('Generating 3D model from image:', imgUrl);
-
+  
   try {
-    const res = await axios.post(`${API_BASE}/runsync`, {
-      input: {
-        type: "GEN_3D",
+    // Call the Worker root directly to trigger the Local Tunnel
+    const res = await axios.post(`${API_BASE}`, {
+        type: "GEN_3D", 
         image_url: imgUrl
-      }
     }, runpodConfig);
 
-    console.log('3D generation full response:', JSON.stringify(res.data, null, 2));
+    // Use the clean, flat data structure from your Worker
+    const result = res.data; 
 
-    if (res.data.output) {
-      const result = res.data.output;
-      console.log('3D generation result:', result);
+    if (result.status === 'success' && result.mesh_url) {
+      console.log('3D Model Success:', result.mesh_url);
+      setModelUrl(result.mesh_url);
+      setStatus('3D model ready! Click "Print Settings" to customize.');
       
-      // Check for mesh URL in various formats
-      let meshUrl = null;
-      
-      if (result.mesh_url) {
-        // Format 1: Direct mesh_url
-        meshUrl = result.mesh_url;
-        console.log('Found mesh_url:', meshUrl);
-      } 
-      else if (result.status === 'success' && result.mesh_url) {
-        // Format 2: In status success
-        meshUrl = result.mesh_url;
-        console.log('Found mesh_url in success:', meshUrl);
-      }
-      else if (result.local_path && result.local_path.endsWith('.glb')) {
-        // Format 3: Local path
-        meshUrl = result.local_path;
-        console.log('Found local_path:', meshUrl);
-      }
-      else if (result.images && Array.isArray(result.images)) {
-        // Format 4: Look for GLB in images array
-        const glb = result.images.find(url => 
-          typeof url === 'string' && url.toLowerCase().endsWith('.glb')
-        );
-        if (glb) {
-          meshUrl = glb;
-          console.log('Found GLB in images array:', meshUrl);
-        }
-      }
-      
-      if (meshUrl) {
-        console.log('Setting model URL:', meshUrl);
-        setModelUrl(meshUrl);
-        setStatus('3D model ready! Click "Print Settings" to customize.');
-        
-        // Auto-show pedestal UI after a delay
-        setTimeout(() => {
-          setShowPedestalUI(true);
-        }, 1500);
-        
-      } else {
-        console.error('No GLB model found in response. Full response:', result);
-        
-        // Try to extract any URL that might be a mesh
-        const allUrls = [];
-        const extractUrls = (obj) => {
-          if (typeof obj === 'string' && obj.includes('http')) {
-            allUrls.push(obj);
-          } else if (Array.isArray(obj)) {
-            obj.forEach(item => extractUrls(item));
-          } else if (typeof obj === 'object' && obj !== null) {
-            Object.values(obj).forEach(value => extractUrls(value));
-          }
-        };
-        extractUrls(result);
-        
-        const possibleMeshUrls = allUrls.filter(url => 
-          url.toLowerCase().endsWith('.glb') || 
-          url.includes('models/') || 
-          url.includes('ComfyUI')
-        );
-        
-        if (possibleMeshUrls.length > 0) {
-          console.log('Found possible mesh URLs:', possibleMeshUrls);
-          setModelUrl(possibleMeshUrls[0]);
-          setStatus('3D model found! Loading...');
-          setTimeout(() => {
-            setShowPedestalUI(true);
-          }, 1500);
-        } else {
-          setStatus('No 3D model found in response');
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: "3D generation completed but couldn't find the model URL. Check console for details."
-          }]);
-        }
-      }
+      // Auto-show pedestal UI after a short delay
+      setTimeout(() => {
+        setShowPedestalUI(true);
+      }, 1500);
     } else {
-      console.error('No output in 3D response:', res.data);
-      setStatus('3D generation failed - no output');
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: "3D generation failed. Please try again with a different image."
-      }]);
+      throw new Error(result.message || 'No mesh URL found in response');
     }
+
   } catch (e) {
-    console.error('3D Generation Error:', e);
-    console.error('Error response:', e.response?.data);
+    console.error("3D Generation Error:", e);
     setStatus('3D Generation Failed');
     setMessages(prev => [...prev, {
       role: 'assistant',
-      content: "3D generation error: " + (e.message || 'Unknown error')
+      content: "3D generation error: " + (e.message || 'Check local handler console')
     }]);
   }
   setLoading(false);
