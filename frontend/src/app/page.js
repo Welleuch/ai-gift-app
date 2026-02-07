@@ -61,24 +61,27 @@ export default function Home() {
   setGeneratedImages([]); 
 
   try {
-    // We send ONE request. The Worker will do BOTH: Idea + Image
+    // 1. Send the request to your Worker
     const res = await axios.post(`${API_BASE}`, {
         type: "CHAT",
         message: userMessage
     }, runpodConfig);
 
-    const output = res.data.output;
+    // 2. Access the data directly (No more .output wrapper)
+    const result = res.data; 
 
-    if (output.status === 'success' && output.ideas) {
-      // The Worker now returns a list of {name, image_url}
-      setGeneratedImages(output.ideas);
+    // 3. SOLID HANDSHAKE: Check for 'status' and 'data'
+    if (result.status === 'success' && result.data) {
+      // Set the images using the new 'data' array containing {name, url}
+      setGeneratedImages(result.data);
+
       setMessages([...newHistory, { 
         role: 'assistant', 
-        content: `I've designed ${output.ideas.length} custom gifts for you! Click one to generate the 3D model.` 
+        content: `I've designed ${result.data.length} custom gifts for you! Click one to generate the 3D model.` 
       }]);
       setStatus('Ready!');
     } else {
-      throw new Error(output.message || 'Generation failed');
+      throw new Error(result.message || 'Generation failed');
     }
 
   } catch (error) {
@@ -359,11 +362,11 @@ const handleSelectImage = async (imgUrl) => {
                 <div
                   key={idx}
                   className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300 bg-slate-100 shadow-sm"
-                  onClick={() => handleSelectImage(idea.image_url)}
+                  onClick={() => handleSelectImage(idea.url)}
                 >
                   <div className="relative w-full h-48 overflow-hidden">
                     <img
-                      src={idea.image_url}
+                      src={idea.url}
                       alt={idea.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       onError={(e) => {
