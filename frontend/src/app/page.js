@@ -8,6 +8,8 @@ import PedestalControls from '../components/PedestalControls';
 
 // --- CONFIGURATION ---
 const API_BASE = "https://3d-gift-manager.walid-elleuch.workers.dev";
+const RUNPOD_API_KEY = "rpa_79OK78KXU2803WGH4FB7ULN38W2OSA8AHP37425K16njva";
+const RUNPOD_ENDPOINT_ID = "nefvw8vdxu2yd3";
 
 // Define runpodConfig BEFORE the component
 const runpodConfig = {
@@ -48,50 +50,90 @@ export default function Home() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
+// --- NEW: INDEPENDENT POLLING LOGIC ---
+  const generateAndAddCard = async (idea) => {
+    try {
+      // 1. Submit async job to RunPod
+      const runRes = await axios.post(
+        `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`,
+        { input: { visual_prompt: idea.visual } },
+        { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
+      );
+      const jobId = runRes.data.id;
+
+      let imageUrl = null;
+      let attempts = 0;
+      const maxAttempts = 60; // 3 minutes total
+
+      // 2. Poll until COMPLETED or FAILED
+      while (!imageUrl && attempts < maxAttempts) {
+        await new Promise(r => setTimeout(r, 4000)); // Poll every 4 seconds
+        
+        const statusRes = await axios.get(
+          `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/status/${jobId}`,
+          { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
+        );
+        
+        if (statusRes.data.status === "COMPLETED") {
+          imageUrl = statusRes.data.output.image_url;
+        } else if (statusRes.data.status === "FAILED") {
+          throw new Error("RunPod job failed");
+        }
+        attempts++;
+      }
+
+      // 3. PHASE 4: Only create the card when the image is 100% ready
+      if (imageUrl) {
+        setGeneratedImages(prev => [...prev, {
+          name: idea.name,
+          url: imageUrl
+        }]);
+      }
+    } catch (err) {
+      console.error(`Generation failed for ${idea.name}:`, err);
+    }
+  };
+
+
   // 1. CHAT & IMAGE GENERATION FLOW
   const sendMessage = async () => {
-  if (!input || loading) return;
+    if (!input || loading) return;
+    const userMessage = input;
+    const newHistory = [...messages, { role: 'user', content: userMessage }];
+    
+    setMessages(newHistory);
+    setInput('');
+    setLoading(true);
+    setStatus('AI is generating ideas...'); 
+    setGeneratedImages([]); 
 
-  const userMessage = input;
-  const newHistory = [...messages, { role: 'user', content: userMessage }];
-  setMessages(newHistory);
-  setInput('');
-  setLoading(true);
-  setStatus('AI is thinking...');
-  setGeneratedImages([]); 
+    try {
+      const res = await axios.post(`${API_BASE}`, {
+          type: "CHAT",
+          message: userMessage
+      }, runpodConfig);
 
-  try {
-    // 1. Send the request to your Worker
-    const res = await axios.post(`${API_BASE}`, {
-        type: "CHAT",
-        message: userMessage
-    }, runpodConfig);
+      const result = res.data;
 
-    // 2. Access the data directly (No more .output wrapper)
-    const result = res.data; 
-
-    // 3. SOLID HANDSHAKE: Check for 'status' and 'data'
-    if (result.status === 'success' && result.data) {
-      // Set the images using the new 'data' array containing {name, url}
-      setGeneratedImages(result.data);
-
-      setMessages([...newHistory, { 
-        role: 'assistant', 
-        content: `I've designed ${result.data.length} custom gifts for you! Click one to generate the 3D model.` 
-      }]);
-      setStatus('Ready!');
-    } else {
-      throw new Error(result.message || 'Generation failed');
+      if (result.status === 'success' && result.ideas) {
+        setMessages([...newHistory, { 
+          role: 'assistant', 
+          content: `I've designed ${result.ideas.length} custom gifts for you! Generating the images now...` 
+        }]);
+        
+        // Trigger the parallel loops
+        result.ideas.forEach(idea => {
+          generateAndAddCard(idea);
+        });
+        
+        setStatus('Processing images...');
+      }
+    } catch (error) {
+      console.error("Worker Error:", error);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Something went wrong." }]);
     }
-
-  } catch (error) {
-    console.error("Worker Error:", error);
-    setMessages(prev => [...prev, { role: 'assistant', content: "Something went wrong. Please try again." }]);
-    setStatus('Error');
-  }
-  setLoading(false);
-};
-
+    setLoading(false);
+  };
 
 // 2. 3D RECONSTRUCTION FLOW - FIXED VERSION
 const handleSelectImage = async (imgUrl) => {
