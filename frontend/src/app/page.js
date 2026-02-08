@@ -8,7 +8,7 @@ import PedestalControls from '../components/PedestalControls';
 
 // --- CONFIGURATION ---
 const API_BASE = "https://3d-gift-manager.walid-elleuch.workers.dev";
-const RUNPOD_API_KEY = "rpa_79OK78KXU2803WGH4FB7ULN38W2OSA8AHP37425K16njva";
+const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = "nefvw8vdxu2yd3";
 
 // Define runpodConfig BEFORE the component
