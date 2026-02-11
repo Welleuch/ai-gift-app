@@ -114,9 +114,11 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const d = pedestalSettings.depth / 10;
   const yOffset = pedestalSettings.offset / 10;
 
-  return (
+ return (
     <group>
-      <group position={[0, yOffset, 0]}>
+      {/* 1. CHARACTER POSITIONING */}
+      {/* We push the group back along the Z-axis by 1/4 of the depth */}
+      <group position={[0, yOffset, -d / 4]}>
         <Center bottom>
           <primitive 
             object={scene} 
@@ -126,6 +128,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
         </Center>
       </group>
 
+      {/* 2. PEDESTAL POSITIONING */}
       <group position={[0, -h / 2, 0]}>
         <mesh ref={pedestalMeshRef}>
           {pedestalSettings.shape === 'cylinder' ? (
@@ -137,12 +140,19 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
+
+        {/* 3. TEXT ON TOP SURFACE */}
         <Text 
-          position={[0, 0, (pedestalSettings.shape === 'cylinder' ? w/2 : d/2) + 0.05]} 
-          fontSize={h * 0.5} 
+          // Positioned on the TOP surface (h/2)
+          // Pushed FORWARD (d/4) to the empty space
+          position={[0, h / 2 + 0.01, d / 4]} 
+          // Rotated -90 degrees on X axis to lay flat
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={w * 0.1} // Scaling font relative to width
           color="#1e293b"
           anchorX="center"
           anchorY="middle"
+          maxWidth={w * 0.8}
         >
           {pedestalSettings.text}
         </Text>
