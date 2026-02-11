@@ -96,44 +96,45 @@ export default function Home() {
 
 
   // 1. CHAT & IMAGE GENERATION FLOW
-  const sendMessage = async () => {
-    if (!input || loading) return;
-    const userMessage = input;
-    const newHistory = [...messages, { role: 'user', content: userMessage }];
-    
-    setMessages(newHistory);
-    setInput('');
-    setLoading(true);
-    setStatus('AI is generating ideas...'); 
-    setGeneratedImages([]); 
+const sendMessage = async () => {
+  if (!input || loading) return;
+  const userMessage = input;
+  const newHistory = [...messages, { role: 'user', content: userMessage }];
+  
+  setMessages(newHistory);
+  setInput('');
+  setLoading(true);
+  setStatus('AI is generating ideas & images...'); 
+  setGeneratedImages([]); 
 
-    try {
-      const res = await axios.post(`${API_BASE}`, {
-          type: "CHAT",
-          message: userMessage
-      }, runpodConfig);
+  try {
+    // 1. Call your Worker
+    const res = await axios.post(`${API_BASE}`, {
+        type: "CHAT",
+        message: userMessage
+    }, runpodConfig);
 
-      const result = res.data;
+    const result = res.data;
 
-      if (result.status === 'success' && result.ideas) {
-        setMessages([...newHistory, { 
-          role: 'assistant', 
-          content: `I've designed ${result.ideas.length} custom gifts for you! Generating the images now...` 
-        }]);
-        
-        // Trigger the parallel loops
-        result.ideas.forEach(idea => {
-          generateAndAddCard(idea);
-        });
-        
-        setStatus('Processing images...');
-      }
-    } catch (error) {
-      console.error("Worker Error:", error);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Something went wrong." }]);
+    if (result.status === 'success' && result.ideas) {
+      // 2. Add the AI message to chat
+      setMessages([...newHistory, { 
+        role: 'assistant', 
+        content: `I've designed ${result.ideas.length} custom gifts for you! Check them out below.` 
+      }]);
+      
+      // 3. ✅ USE THE IMAGES ALREADY IN THE WORKER RESPONSE
+      // We don't need generateAndAddCard anymore!
+      setGeneratedImages(result.ideas); 
+      
+      setStatus('Ready');
     }
-    setLoading(false);
-  };
+  } catch (error) {
+    console.error("Worker Error:", error);
+    setMessages(prev => [...prev, { role: 'assistant', content: "Something went wrong." }]);
+  }
+  setLoading(false);
+};
 
 // 2. 3D RECONSTRUCTION FLOW - FIXED VERSION
 const handleSelectImage = async (imgUrl) => {
