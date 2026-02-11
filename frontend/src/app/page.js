@@ -159,37 +159,66 @@ const sendMessage = async () => {
   }
 };
 
-// 2. 3D RECONSTRUCTION FLOW - FIXED VERSION
+// 2. 3D RECONSTRUCTION FLOW - POLLING VERSION
 const handleSelectImage = async (imgUrl) => {
   setModelUrl(null);
   setShowPedestalUI(false);
   setLoading(true);
-  setStatus('Generating 3D Geometry... (this takes 1-2 minutes)');
+  setStatus('Starting 3D Engine...');
   setGeneratedImages([]);
 
-  console.log('Generating 3D model from image:', imgUrl);
-  
   try {
-    // Call the Worker root directly to trigger the Local Tunnel
+    // STEP 1: Tell Worker to start the job
     const res = await axios.post(`${API_BASE}`, {
         type: "GEN_3D", 
         image_url: imgUrl
     }, runpodConfig);
 
-    // Use the clean, flat data structure from your Worker
-    const result = res.data; 
+    const data = res.data;
 
-    if (result.status === 'success' && result.mesh_url) {
-      console.log('3D Model Success:', result.mesh_url);
-      setModelUrl(result.mesh_url);
-      setStatus('3D model ready! Click "Print Settings" to customize.');
+    if (data.jobId) {
+      setStatus('Sculpting 3D Geometry... (this takes ~1 min)');
       
-      // Auto-show pedestal UI after a short delay
-      setTimeout(() => {
-        setShowPedestalUI(true);
-      }, 1500);
+      // STEP 2: Start Polling
+      let isDone = false;
+      let attempts = 0;
+      const maxAttempts = 40; // Total ~3 minutes
+
+      while (!isDone && attempts < maxAttempts) {
+        attempts++;
+        
+        // Wait 5 seconds between checks
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        const statusRes = await axios.post(`${API_BASE}`, {
+          type: "CHECK_3D_STATUS",
+          jobId: data.jobId
+        }, runpodConfig);
+
+        const statusData = statusRes.data;
+
+        if (statusData.status === 'COMPLETED') {
+          isDone = true;
+          // Look for the URL in the output - Adjust based on your RunPod log structure
+          // Usually statusData.output is the URL or an object containing it
+          const meshUrl = typeof statusData.output === 'string' ? statusData.output : statusData.output.mesh_url;
+          
+          console.log('3D Model Ready:', meshUrl);
+          setModelUrl(meshUrl);
+          setStatus('3D model ready! Customize your print below.');
+          setShowPedestalUI(true);
+        } else if (statusData.status === 'FAILED') {
+          throw new Error("The 3D engine encountered an error.");
+        } else {
+          // Still processing... update UI with progress if available
+          setStatus(`Sculpting... ${attempts * 5}s`);
+        }
+      }
+      
+      if (!isDone) throw new Error("Generation timed out. Please try again.");
+
     } else {
-      throw new Error(result.message || 'No mesh URL found in response');
+      throw new Error(data.error || "Failed to start 3D job");
     }
 
   } catch (e) {
@@ -197,10 +226,11 @@ const handleSelectImage = async (imgUrl) => {
     setStatus('3D Generation Failed');
     setMessages(prev => [...prev, {
       role: 'assistant',
-      content: "3D generation error: " + (e.message || 'Check local handler console')
+      content: "Error: " + (e.message || 'The 3D server is busy.')
     }]);
+  } finally {
+    setLoading(false);
   }
-  setLoading(false);
 };
 
   // 3. SLICING & PRICE FLOW (same as before)
