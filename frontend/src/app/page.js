@@ -104,11 +104,11 @@ const sendMessage = async () => {
   setMessages(newHistory);
   setInput('');
   setLoading(true);
-  setStatus('AI is generating ideas & images...'); 
+  setStatus('Brainstorming ideas...'); 
   setGeneratedImages([]); 
 
   try {
-    // 1. Call your Worker
+    // STEP 1: Get only the names/descriptions from Llama
     const res = await axios.post(`${API_BASE}`, {
         type: "CHAT",
         message: userMessage
@@ -117,23 +117,46 @@ const sendMessage = async () => {
     const result = res.data;
 
     if (result.status === 'success' && result.ideas) {
-      // 2. Add the AI message to chat
       setMessages([...newHistory, { 
         role: 'assistant', 
-        content: `I've designed ${result.ideas.length} custom gifts for you! Check them out below.` 
+        content: `I've got 3 ideas! Generating the 3D previews now...` 
       }]);
       
-      // 3. ✅ USE THE IMAGES ALREADY IN THE WORKER RESPONSE
-      // We don't need generateAndAddCard anymore!
-      setGeneratedImages(result.ideas); 
-      
-      setStatus('Ready');
+      // STEP 2: Create "Loading" placeholders immediately
+      // This makes the 3 boxes appear on screen at once, but empty/loading
+      const placeholders = result.ideas.map((idea, index) => ({
+        ...idea,
+        url: null, // No image yet
+        isLoading: true,
+        id: index
+      }));
+      setGeneratedImages(placeholders);
+      setLoading(false); // Stop the main sidebar loader
+      setStatus('Generating 3D previews...');
+
+      // STEP 3: Request each image INDIVIDUALLY in parallel
+      result.ideas.forEach(async (idea, index) => {
+        try {
+          const imgRes = await axios.post(`${API_BASE}`, {
+            type: "GEN_IMAGE", // New case in your worker
+            visual: idea.visual,
+            name: idea.name,
+            index: index
+          }, runpodConfig);
+
+          // STEP 4: Update ONLY this specific image in the state
+          setGeneratedImages(prev => 
+            prev.map((item, i) => i === index ? { ...imgRes.data, isLoading: false } : item)
+          );
+        } catch (err) {
+          console.error(`Failed to load image ${index}`, err);
+        }
+      });
     }
   } catch (error) {
     console.error("Worker Error:", error);
-    setMessages(prev => [...prev, { role: 'assistant', content: "Something went wrong." }]);
+    setLoading(false);
   }
-  setLoading(false);
 };
 
 // 2. 3D RECONSTRUCTION FLOW - FIXED VERSION
@@ -315,116 +338,118 @@ const handleSelectImage = async (imgUrl) => {
   )}
 </div>
 
-    {/* IMAGE GALLERY SECTION */}
-        {generatedImages.length > 0 && (
-          <div className="absolute bottom-8 left-8 right-8 bg-white/90 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
-              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              {generatedImages.map((idea, idx) => (
-                <div
-                  key={idx}
-                  className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300 bg-slate-100 shadow-sm"
-                  onClick={() => handleSelectImage(idea.url)}
-                >
-                  <div className="relative w-full h-48 overflow-hidden">
+{/* IMAGE GALLERY SECTION */}
+      {generatedImages.length > 0 && (
+        <div className="absolute bottom-8 left-8 right-8 bg-white/90 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
+            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+              {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {generatedImages.map((idea, idx) => (
+              <div
+                key={idx}
+                className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300 bg-slate-100 shadow-sm"
+                onClick={() => !idea.isLoading && handleSelectImage(idea.url)}
+              >
+                <div className="relative w-full h-48 overflow-hidden">
+                  {idea.isLoading ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 animate-pulse">
+                      <Loader2 className="animate-spin text-blue-500 mb-2" size={24} />
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Baking Image...</span>
+                    </div>
+                  ) : (
                     <img
                       src={idea.url}
                       alt={idea.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       onError={(e) => {
-                        console.error('Image failed to load:', idea.image_url);
                         e.target.style.display = 'none';
                         e.target.parentElement.innerHTML = `
-                          <div class="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-200 to-slate-300 p-4">
-                            <div class="text-slate-700 text-sm font-bold mb-2 text-center">Image Failed</div>
-                            <div class="text-slate-500 text-xs text-center">Prompt might be invalid</div>
+                          <div class="w-full h-full flex flex-col items-center justify-center bg-slate-200 p-4">
+                            <div class="text-slate-700 text-sm font-bold text-center">Failed</div>
                           </div>
                         `;
                       }}
                     />
-                  </div>
-
-                  {/* Name Overlay using the clean data from Cloudflare AI */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
-                    <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-1">
-                      {idea.name}
-                    </p>
-                    <p className="text-white text-xs font-bold">
-                      Click to generate 3D
-                    </p>
-                  </div>
-
-                  <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-black px-2 py-1 rounded-full">
-                    {idx + 1}
-                  </div>
+                  )}
                 </div>
-              ))}
-            </div>
-            <div className="mt-4 text-center">
-              <p className="text-xs text-slate-500 font-medium">
-                Select a design to begin the 3D conversion process
-              </p>
-            </div>
-          </div>
-        )}
 
-      {/* CONTROL BAR */}
-        <div className="absolute top-8 left-8 right-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowPedestalUI(!showPedestalUI)}
-              className="glass-card px-6 py-3 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all bg-white/50 border border-white"
-            >
-              <Settings size={18} className="inline mr-2 text-slate-700" />
-              Print Settings
-            </button>
-            {orderSummary && (
-              <div className="glass-card px-6 py-3 rounded-2xl bg-white/50 border border-white">
-                <div className="text-sm font-bold text-slate-800">
-                  Est. Print: <span className="text-green-600">{orderSummary.print_time}</span> • 
-                  Weight: <span className="text-blue-600">{orderSummary.weight}</span> • 
-                  Price: <span className="text-purple-600">{orderSummary.price}</span>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
+                  <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                    {idea.name}
+                  </p>
+                  <p className="text-white text-xs font-bold">
+                    {idea.isLoading ? "Generating..." : "Click to generate 3D"}
+                  </p>
+                </div>
+
+                <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-black px-2 py-1 rounded-full">
+                  {idx + 1}
                 </div>
               </div>
-            )}
+            ))}
           </div>
-          <div className="flex items-center gap-3">
-            {modelUrl && (
-              <button
-                onClick={handlePrepareGCode}
-                className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black transition-all flex items-center gap-2 shadow-xl"
-              >
-                <Download size={18} />
-                Order Print
-              </button>
-            )}
+          <div className="mt-4 text-center">
+            <p className="text-xs text-slate-500 font-medium">
+              Select a design to begin the 3D conversion process
+            </p>
           </div>
         </div>
-
-        {/* STATUS INDICATOR - This was missing and caused the build error */}
-        {status && !loading && (
-          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg border border-white/50 z-50">
-            <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-              <CheckCircle2 size={16} className="text-green-500" />
-              {status}
-            </div>
-          </div>
-        )}
-      </div> {/* This closes the MAIN WORKBENCH div */}
-
-      {/* PEDESTAL UI OVERLAY - This handles your 3D customization menu */}
-      {showPedestalUI && (
-        <PedestalControls 
-          settings={pedestalSettings} 
-          setSettings={setPedestalSettings}
-          onPrepare={() => setShowPedestalUI(false)}
-        />
       )}
-    </div> // This closes the Outer Flex Container
+
+      {/* CONTROL BAR */}
+      <div className="absolute top-8 left-8 right-8 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowPedestalUI(!showPedestalUI)}
+            className="glass-card px-6 py-3 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all bg-white/50 border border-white"
+          >
+            <Settings size={18} className="inline mr-2 text-slate-700" />
+            Print Settings
+          </button>
+          {orderSummary && (
+            <div className="glass-card px-6 py-3 rounded-2xl bg-white/50 border border-white">
+              <div className="text-sm font-bold text-slate-800">
+                Est. Print: <span className="text-green-600">{orderSummary.print_time}</span> • 
+                Weight: <span className="text-blue-600">{orderSummary.weight}</span> • 
+                Price: <span className="text-purple-600">{orderSummary.price}</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {modelUrl && (
+            <button
+              onClick={handlePrepareGCode}
+              className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black transition-all flex items-center gap-2 shadow-xl"
+            >
+              <Download size={18} />
+              Order Print
+            </button>
+          )}
+        </div>
+      </div>
+
+      {status && !loading && (
+        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg border border-white/50 z-50">
+          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
+            <CheckCircle2 size={16} className="text-green-500" />
+            {status}
+          </div>
+        </div>
+      )}
+    </div>
+
+    {showPedestalUI && (
+      <PedestalControls 
+        settings={pedestalSettings} 
+        setSettings={setPedestalSettings}
+        onPrepare={() => setShowPedestalUI(false)}
+      />
+    )}
+  </div>
   );
 }
