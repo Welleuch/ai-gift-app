@@ -68,10 +68,10 @@ export default function Home() {
   // 1. If the worker sends images (The "Good Version" behavior)
   if (chatRes.data.images) {
      setMessages(prev => [...prev, { 
-       role: 'assistant', 
-       content: "Here are the designs I generated:",
-       images: chatRes.data.images // This stores the actual pictures
-     }]);
+  role: 'assistant', 
+  content: "Check out these designs!", 
+  images: chatRes.data.images // MUST matches the key from your Worker
+}]);
   } 
   
   // 2. If the worker sends ideas (The current behavior)
@@ -152,41 +152,46 @@ export default function Home() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {messages.map((m, i) => (
-            /* This div handles the Left/Right alignment */
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium shadow-sm whitespace-pre-wrap ${
-                m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
-              }`}>
-                {m.content}
+  {messages.map((m, i) => (
+    /* 1. Alignment Wrapper */
+    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      
+      {/* 2. Chat Bubble */}
+      <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium shadow-sm whitespace-pre-wrap ${
+        m.role === 'user' 
+          ? 'bg-blue-600 text-white rounded-tr-none' 
+          : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
+      }`}>
+        
+        {/* The Text Content */}
+        {m.content}
 
-                {/* THE IMAGE GRID FIX */}
-                {m.images && (
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    {m.images.map((imgUrl, idx) => (
-                      <img 
-                        key={idx} 
-                        src={imgUrl} 
-                        alt="AI Proposal"
-                        className="rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/20 shadow-sm" 
-                        onClick={() => generate3DModel(m.content)} 
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {loading && (
-            <div className="bg-slate-100 p-4 rounded-2xl flex items-center gap-3 animate-pulse w-fit">
-              <Loader2 className="animate-spin text-blue-600" size={16} />
-              <span className="text-xs font-bold text-slate-500 uppercase">{status}</span>
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
-
+        {/* 3. The Image Gallery (Added here) */}
+        {m.images && (
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            {m.images.map((imgUrl, idx) => (
+              <img 
+                key={idx} 
+                src={imgUrl} 
+                alt="AI Design"
+                className="rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/20 shadow-sm" 
+                onClick={() => generate3DModel(m.content)} 
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  ))}
+  
+  {loading && (
+    <div className="bg-slate-100 p-4 rounded-2xl flex items-center gap-3 animate-pulse w-fit">
+      <Loader2 className="animate-spin text-blue-600" size={16} />
+      <span className="text-xs font-bold text-slate-500 uppercase">{status}</span>
+    </div>
+  )}
+  <div ref={chatEndRef} />
+</div>
         <div className="p-6 bg-slate-50 border-t border-slate-200">
           <div className="relative flex items-center">
             <input 
