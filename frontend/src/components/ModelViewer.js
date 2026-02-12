@@ -114,11 +114,10 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const d = pedestalSettings.depth / 10;
   const yOffset = pedestalSettings.offset / 10;
 
- return (
-    <group>
-      {/* 1. CHARACTER POSITIONING */}
-      {/* We push the group back along the Z-axis by 1/4 of the depth */}
-      <group position={[0, yOffset, -d / 4]}>
+<group>
+      {/* 1.CHARACTER POSITIONING */}
+      {/* We use top property of Center or manual position on the group */}
+      <group position={[0, yOffset, -d / 3]}> 
         <Center bottom>
           <primitive 
             object={scene} 
@@ -128,7 +127,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
         </Center>
       </group>
 
-      {/* 2. PEDESTAL POSITIONING */}
+      {/* 2. PEDESTAL & TEXT */}
       <group position={[0, -h / 2, 0]}>
         <mesh ref={pedestalMeshRef}>
           {pedestalSettings.shape === 'cylinder' ? (
@@ -141,25 +140,22 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
 
-        {/* 3. TEXT ON TOP SURFACE */}
+        {/* 3. TEXT - High Visibility Version */}
         <Text 
-          // Positioned on the TOP surface (h/2)
-          // Pushed FORWARD (d/4) to the empty space
-          position={[0, h / 2 + 0.01, d / 4]} 
-          // Rotated -90 degrees on X axis to lay flat
+          // h/2 sits on top. We add 0.05 to lift it slightly off the surface
+          position={[0, h / 2 + 0.05, d / 4]} 
           rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={w * 0.1} // Scaling font relative to width
-          color="#1e293b"
+          fontSize={0.4} // Using a fixed size for testing visibility
+          color="#ff0000" // TEMPORARY RED: If you see red, the update worked!
           anchorX="center"
           anchorY="middle"
-          maxWidth={w * 0.8}
+          maxWidth={w * 0.9}
         >
-          {pedestalSettings.text}
+          {pedestalSettings.text || "PREVIEW TEXT"}
         </Text>
       </group>
     </group>
   );
-});
 
 export default function ModelViewer({ url, pedestalSettings, exporterRef }) {
   if (!url) return null;
