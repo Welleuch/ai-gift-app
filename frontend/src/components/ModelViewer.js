@@ -5,48 +5,49 @@ import { OrbitControls, Stage, useGLTF, Center, Text, RoundedBox, Bounds } from 
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
-const Model = forwardRef(({ url, pedestalSettings }, ref) => {
+const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   const { scene } = useGLTF(url);
   const pedestalMeshRef = useRef();
   const [modelError, setModelError] = useState(false);
+  const hasAutoScaled = useRef(false); // Prevents the infinite loop
 
-useEffect(() => {
-  if (scene) {
-    // 1. Calculate the model's boundaries
-    const box = new THREE.Box3().setFromObject(scene);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
+  useEffect(() => {
+    if (scene && !hasAutoScaled.current) {
+      // 1. Calculate the model's boundaries
+      const box = new THREE.Box3().setFromObject(scene);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
 
-    // 2. AUTO-SCALE: Make the model roughly 80% of the pedestal's width
-    // pedestalSettings.width is in mm (e.g., 60), Three.js units are /10 (e.g., 6.0)
-    const targetSize = (pedestalSettings.width / 10) * 0.8; 
-    const currentMaxDimension = Math.max(size.x, size.y, size.z);
-    const autoScale = targetSize / currentMaxDimension;
-    
-    // 3. AUTO-POSITION: Center the model and place its bottom at Y=0
-    // This makes the 'primitive' pivot point its actual feet
-    scene.position.x = -center.x * autoScale;
-    scene.position.y = -box.min.y * autoScale; // Forces bottom to 0
-    scene.position.z = -center.z * autoScale;
-    scene.scale.setScalar(autoScale);
+      // 2. AUTO-SCALE Logic
+      // Target: Model should be 70% of the pedestal width (w/10)
+      const targetSizeInThreeUnits = (pedestalSettings.width / 10) * 0.7; 
+      const currentMaxDim = Math.max(size.x, size.y, size.z);
+      const calculatedScale = targetSizeInThreeUnits / currentMaxDim;
+      
+      // 3. APPLY POSITION (Feet to 0)
+      scene.position.x = -center.x * calculatedScale;
+      scene.position.y = -box.min.y * calculatedScale; 
+      scene.position.z = -center.z * calculatedScale;
+      scene.scale.setScalar(calculatedScale);
 
-    // 4. Update the settings so the sliders reflect this auto-calculation
-    // This prevents the "confused user" because the scale slider will move to the right spot
-    setSettings(prev => ({
-      ...prev,
-      scale: autoScale * 10, // Adjusting back to your slider's expected scale range
-      offset: (pedestalSettings.height / 2) // Lift it by half the pedestal height to sit on top
-    }));
+      // 4. UPDATE GLOBAL SETTINGS (Once)
+      // We wrap this in a timeout or check to prevent React render loops
+      setTimeout(() => {
+        setSettings(prev => ({
+          ...prev,
+          scale: calculatedScale * 10, // Sync slider to the new scale
+          offset: pedestalSettings.height / 2 // Position feet on top of base
+        }));
+      }, 0);
 
-    scene.traverse((child) => {
-      if (child.isMesh) {
-        if (!child.material) child.material = new THREE.MeshStandardMaterial({ color: '#cbd5e1' });
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-  }
-}, [scene]);
+      hasAutoScaled.current = true; // Lock it so it doesn't loop
+    }
+  }, [scene, url]); // Reset when the URL changes (new model)
+
+  // Reset the lock if a new model is loaded
+  useEffect(() => {
+    hasAutoScaled.current = false;
+  }, [url]);
 
 
   useImperativeHandle(ref, () => ({
@@ -142,23 +143,25 @@ return (
 // IMPORTANT: Name the component for the forwardRef
 Model.displayName = "Model";
 
-export default function ModelViewer({ url, pedestalSettings, exporterRef }) {
+export default function ModelViewer({ url, pedestalSettings, setSettings, exporterRef }) {
   if (!url) return null;
   
   return (
     <div className="w-full h-full">
       <Canvas shadows camera={{ position: [0, 2, 5], fov: 40 }}>
-        <color attach="background" args={['#f8fafc']} />
+        {/* ... */}
         <Suspense fallback={null}>
-          <Stage environment="city" intensity={0.5} adjustCamera={false}>
             <Bounds fit clip observe margin={1.2}>
-              <Model ref={exporterRef} url={url} pedestalSettings={pedestalSettings} />
+              {/* Added setSettings prop here */}
+              <Model 
+                ref={exporterRef} 
+                url={url} 
+                pedestalSettings={pedestalSettings} 
+                setSettings={setSettings} 
+              />
             </Bounds>
-          </Stage>
         </Suspense>
-        <OrbitControls makeDefault maxPolarAngle={Math.PI / 1.5} />
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
+        {/* ... */}
       </Canvas>
     </div>
   );
