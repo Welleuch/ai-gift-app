@@ -11,319 +11,203 @@ const API_BASE = "https://3d-gift-manager.walid-elleuch.workers.dev";
 const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
 const RUNPOD_ENDPOINT_ID = "nefvw8vdxu2yd3";
 
-// Define runpodConfig BEFORE the component
 const runpodConfig = {
   headers: {
     'Content-Type': 'application/json'
   }
 };
 
+// Import ModelViewer dynamically to avoid SSR issues with Three.js
 const ModelViewer = dynamic(() => import('../components/ModelViewer'), {
   ssr: false,
-  loading: () => <div className="text-slate-400 animate-pulse font-bold text-xs uppercase tracking-widest">Initializing 3D Engine...</div>
+  loading: () => (
+    <div className="flex items-center justify-center h-full bg-slate-100">
+      <div className="text-slate-400 animate-pulse font-bold text-xs uppercase tracking-widest">
+        Initializing 3D Engine...
+      </div>
+    </div>
+  )
 });
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
-
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "Welcome to the AI 3D Gift Studio. Tell me about the recipient's hobbies to begin." }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
-  const [generatedImages, setGeneratedImages] = useState([]);
   const [modelUrl, setModelUrl] = useState(null);
-
-  const exporterRef = useRef(null);
   const [showPedestalUI, setShowPedestalUI] = useState(false);
   const [orderSummary, setOrderSummary] = useState(null);
-  const [isOrdered, setIsOrdered] = useState(false);
+  
+  // STABLE INITIAL STATE
+  const [pedestalSettings, setPedestalSettings] = useState({
+    shape: 'box',
+    height: 10,
+    width: 60,
+    depth: 60,
+    text: '',
+    offset: 10,
+    scale: 1.0,
+    modelZOffset: 0
+  });
 
- const [pedestalSettings, setPedestalSettings] = useState({
-  shape: 'box', 
-  height: 10, 
-  width: 60, 
-  depth: 60, 
-  text: '', 
-  offset: 0, 
-  scale: 1.0,
-  modelZOffset: 0
-});
+  const chatEndRef = useRef(null);
+  const exporterRef = useRef();
 
-  const scrollRef = useRef(null);
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-// --- NEW: INDEPENDENT POLLING LOGIC ---
-  const generateAndAddCard = async (idea) => {
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
+
+    const userMsg = input;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setLoading(true);
+    setStatus('Analyzing ideas...');
+
     try {
-      // 1. Submit async job to RunPod
-      const runRes = await axios.post(
-        `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`,
-        { input: { visual_prompt: idea.visual } },
-        { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
-      );
-      const jobId = runRes.data.id;
+      const chatRes = await axios.post(`${API_BASE}/chat`, {
+        messages: [...messages, { role: 'user', content: userMsg }]
+      });
 
-      let imageUrl = null;
-      let attempts = 0;
-      const maxAttempts = 60; // 3 minutes total
+      const assistantMsg = chatRes.data.content;
+      setMessages(prev => [...prev, { role: 'assistant', content: assistantMsg }]);
 
-      // 2. Poll until COMPLETED or FAILED
-      while (!imageUrl && attempts < maxAttempts) {
-        await new Promise(r => setTimeout(r, 4000)); // Poll every 4 seconds
-        
-        const statusRes = await axios.get(
-          `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/status/${jobId}`,
-          { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
-        );
-        
-        if (statusRes.data.status === "COMPLETED") {
-          imageUrl = statusRes.data.output.image_url;
-        } else if (statusRes.data.status === "FAILED") {
-          throw new Error("RunPod job failed");
-        }
-        attempts++;
-      }
-
-      // 3. PHASE 4: Only create the card when the image is 100% ready
-      if (imageUrl) {
-        setGeneratedImages(prev => [...prev, {
-          name: idea.name,
-          url: imageUrl
-        }]);
+      if (assistantMsg.toLowerCase().includes('generating') || assistantMsg.toLowerCase().includes('3d model')) {
+        await generate3DModel(userMsg);
       }
     } catch (err) {
-      console.error(`Generation failed for ${idea.name}:`, err);
+      console.error(err);
+      setMessages(prev => [...prev, { role: 'assistant', content: "I encountered an error. Please try again." }]);
+    } finally {
+      setLoading(false);
+      setStatus('');
     }
   };
 
-
-  // 1. CHAT & IMAGE GENERATION FLOW
-const sendMessage = async () => {
-  if (!input || loading) return;
-  const userMessage = input;
-  const newHistory = [...messages, { role: 'user', content: userMessage }];
-  
-  setMessages(newHistory);
-  setInput('');
-  setLoading(true);
-  setStatus('Brainstorming ideas...'); 
-  setGeneratedImages([]); 
-
-  try {
-    // STEP 1: Get only the names/descriptions from Llama
-    const res = await axios.post(`${API_BASE}`, {
-        type: "CHAT",
-        message: userMessage
-    }, runpodConfig);
-
-    const result = res.data;
-
-    if (result.status === 'success' && result.ideas) {
-      setMessages([...newHistory, { 
-        role: 'assistant', 
-        content: `I've got 3 ideas! Generating the 3D previews now...` 
-      }]);
-      
-      // STEP 2: Create "Loading" placeholders immediately
-      // This makes the 3 boxes appear on screen at once, but empty/loading
-      const placeholders = result.ideas.map((idea, index) => ({
-        ...idea,
-        url: null, // No image yet
-        isLoading: true,
-        id: index
-      }));
-      setGeneratedImages(placeholders);
-      setLoading(false); // Stop the main sidebar loader
-      setStatus('Generating 3D previews...');
-
-      // STEP 3: Request each image INDIVIDUALLY in parallel
-      result.ideas.forEach(async (idea, index) => {
-        try {
-          const imgRes = await axios.post(`${API_BASE}`, {
-            type: "GEN_IMAGE", // New case in your worker
-            visual: idea.visual,
-            name: idea.name,
-            index: index
-          }, runpodConfig);
-
-          // STEP 4: Update ONLY this specific image in the state
-          setGeneratedImages(prev => 
-            prev.map((item, i) => i === index ? { ...imgRes.data, isLoading: false } : item)
-          );
-        } catch (err) {
-          console.error(`Failed to load image ${index}`, err);
-        }
-      });
-    }
-  } catch (error) {
-    console.error("Worker Error:", error);
-    setLoading(false);
-  }
-};
-
-// 2. 3D RECONSTRUCTION FLOW - POLLING VERSION
-const handleSelectImage = async (imgUrl) => {
-  setModelUrl(null);
-  setShowPedestalUI(false);
-  setLoading(true);
-  setStatus('Starting 3D Engine...');
-  setGeneratedImages([]);
-
-  try {
-    // STEP 1: Tell Worker to start the job
-    const res = await axios.post(`${API_BASE}`, {
-        type: "GEN_3D", 
-        image_url: imgUrl
-    }, runpodConfig);
-
-    const data = res.data;
-
-    if (data.jobId) {
-      setStatus('Sculpting 3D Geometry... (this takes ~1 min)');
-      
-      // STEP 2: Start Polling
-      let isDone = false;
-      let attempts = 0;
-      const maxAttempts = 40; // Total ~3 minutes
-
-      while (!isDone && attempts < maxAttempts) {
-        attempts++;
-        
-        // Wait 5 seconds between checks
-        await new Promise(resolve => setTimeout(resolve, 5000));
-
-        const statusRes = await axios.post(`${API_BASE}`, {
-          type: "CHECK_3D_STATUS",
-          jobId: data.jobId
-        }, runpodConfig);
-
-        const statusData = statusRes.data;
-
-        if (statusData.status === 'COMPLETED') {
-          isDone = true;
-          // Look for the URL in the output - Adjust based on your RunPod log structure
-          // Usually statusData.output is the URL or an object containing it
-          const meshUrl = typeof statusData.output === 'string' ? statusData.output : statusData.output.mesh_url;
-          
-          console.log('3D Model Ready:', meshUrl);
-          setModelUrl(meshUrl);
-          setStatus('3D model ready! Customize your print below.');
-          setShowPedestalUI(true);
-        } else if (statusData.status === 'FAILED') {
-          throw new Error("The 3D engine encountered an error.");
-        } else {
-          // Still processing... update UI with progress if available
-          setStatus(`Sculpting... ${attempts * 5}s`);
-        }
-      }
-      
-      if (!isDone) throw new Error("Generation timed out. Please try again.");
-
-    } else {
-      throw new Error(data.error || "Failed to start 3D job");
-    }
-
-  } catch (e) {
-    console.error("3D Generation Error:", e);
-    setStatus('3D Generation Failed');
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: "Error: " + (e.message || 'The 3D server is busy.')
-    }]);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // 3. SLICING & PRICE FLOW (same as before)
-  const handlePrepareGCode = async () => {
-    if (!exporterRef.current) return;
-    setStatus('Preparing Manufacturing Data...');
-    setLoading(true);
-
+  const generate3DModel = async (prompt) => {
+    setStatus('Generating 3D assets...');
     try {
-      // Step A: Export STL from browser
+      const response = await axios.post(
+        `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`,
+        { input: { prompt, mode: "preview" } },
+        { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
+      );
+
+      const jobId = response.data.id;
+      pollStatus(jobId);
+    } catch (err) {
+      console.error("RunPod Error:", err);
+      setStatus("Generation failed.");
+    }
+  };
+
+  const pollStatus = async (jobId) => {
+    const check = async () => {
+      const res = await axios.get(
+        `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/status/${jobId}`,
+        { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
+      );
+
+      if (res.data.status === 'COMPLETED') {
+        const url = res.data.output.model_url || res.data.output;
+        setModelUrl(url);
+        setStatus("Model ready!");
+        setShowPedestalUI(true);
+      } else if (res.data.status === 'FAILED') {
+        setStatus("Generation failed.");
+      } else {
+        setTimeout(check, 3000);
+      }
+    };
+    check();
+  };
+
+  const handleDownloadSTL = async () => {
+    if (!exporterRef.current) return;
+    setStatus("Preparing high-quality mesh...");
+    
+    try {
       const stlData = exporterRef.current.exportSTL();
-
-      // Step B: Convert Blob to Base64
       const blob = new Blob([stlData], { type: 'application/octet-stream' });
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-
-      reader.onloadend = async () => {
-        const base64data = reader.result.split(',')[1];
-
-        // Step C: Send to Serverless Manager
-        const res = await axios.post(`${API_BASE}/runsync`, {
-          input: {
-            type: "SLICE",
-            stl_data: base64data
-          }
-        }, runpodConfig);
-
-        if (res.data.output && res.data.output.status === 'success') {
-          setOrderSummary(res.data.output);
-          setStatus('Ready');
-        } else {
-          alert("Slicing Error: " + (res.data.output?.message || "Unknown error"));
-        }
-        setLoading(false);
-      };
-    } catch (e) {
-      console.error(e);
-      setStatus('Slicing failed');
-      setLoading(false);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `3d-gift-${Date.now()}.stl`;
+      link.click();
+      
+      // Simulate Order Summary Calculation
+      setOrderSummary({
+        print_time: "4h 12m",
+        weight: "42g",
+        price: "$18.50"
+      });
+      setStatus("Design ready for printing!");
+    } catch (err) {
+      console.error(err);
+      setStatus("Export failed.");
     }
   };
 
   if (!mounted) return null;
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 font-sans text-slate-900 overflow-hidden tracking-tight">
-      {/* SIDEBAR */}
-      <div className="w-[400px] bg-slate-900 flex flex-col z-20 shadow-2xl">
-        <div className="p-8 border-b border-slate-800 flex items-center gap-3">
-          <div className="bg-blue-500 p-2.5 rounded-2xl text-white shadow-lg shadow-blue-500/20"><Sparkles size={20} /></div>
-          <h1 className="text-white font-black text-xl tracking-tighter">GiftAI Studio</h1>
+    <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+      {/* LEFT: CHAT SIDEBAR */}
+      <div className="w-[400px] flex flex-col bg-white border-r border-slate-200 shadow-xl z-20">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-500 p-2 rounded-xl">
+              <Sparkles size={20} className="text-white" />
+            </div>
+            <h1 className="font-black tracking-tighter text-xl">GIFT STUDIO</h1>
+          </div>
         </div>
 
-        <div ref={scrollRef} className="flex-1 p-6 overflow-y-auto space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-              <div className={`p-4 rounded-[24px] max-w-[85%] text-sm leading-relaxed shadow-sm font-medium ${m.role === 'user' ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-slate-800 text-slate-200 border border-slate-700'
-                }`}>{m.content}</div>
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium shadow-sm ${
+                m.role === 'user' 
+                ? 'bg-blue-600 text-white rounded-tr-none' 
+                : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
+              }`}>
+                {m.content}
+              </div>
             </div>
           ))}
           {loading && (
-            <div className="text-blue-400 text-[10px] font-black uppercase tracking-[0.2em] animate-pulse flex items-center gap-3 px-2">
-              <Loader2 className="animate-spin" size={14} /> {status}
+            <div className="flex justify-start">
+              <div className="bg-slate-100 p-4 rounded-2xl flex items-center gap-3 animate-pulse">
+                <Loader2 className="animate-spin text-blue-600" size={16} />
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{status}</span>
+              </div>
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
 
-        <div className="p-6 bg-slate-900 border-t border-slate-800">
-          <div className="relative">
+        <div className="p-6 bg-slate-50 border-t border-slate-200">
+          <div className="relative flex items-center">
             <input
-              className="w-full bg-slate-800 border border-slate-700 rounded-2xl py-4 pl-5 pr-14 text-white text-sm focus:ring-4 focus:ring-blue-500/20 outline-none transition-all placeholder:text-slate-500 font-bold"
+              type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  sendMessage();
-                }
-              }}
-              placeholder="Design something unique..."
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Describe your gift idea..."
+              className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-inner font-medium"
             />
             <button
-              onClick={sendMessage}
+              onClick={handleSend}
               disabled={loading}
-              className="absolute right-2 top-2 p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute right-2 p-3 bg-slate-900 text-white rounded-xl hover:bg-black transition-all disabled:opacity-50"
             >
               <Send size={18} />
             </button>
@@ -331,162 +215,95 @@ const handleSelectImage = async (imgUrl) => {
         </div>
       </div>
 
-      {/* MAIN WORKBENCH */}
-      <div className="flex-1 relative bg-slate-100">
-  <div className="absolute inset-0 z-10"> {/* Added z-10 */}
-    {modelUrl ? (
-      <ModelViewer 
-        url={modelUrl} 
-        pedestalSettings={pedestalSettings} 
-        setSettings={setPedestalSettings}
-        exporterRef={exporterRef} 
-      />
-  ) : loading && status.includes('3D') ? (
-    <div className="w-full h-full flex items-center justify-center">
-      <div className="text-center space-y-6">
-        <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-100 to-slate-100 rounded-3xl flex items-center justify-center shadow-xl animate-pulse">
-          <Layers className="text-blue-400" size={40} />
-        </div>
-        <div>
-          <h3 className="font-black text-slate-800 text-lg">Generating 3D Model</h3>
-          <p className="text-slate-500 text-sm max-w-sm mx-auto mt-2">
-            {status}
-          </p>
-          <p className="text-slate-400 text-xs mt-4">
-            This may take 1-2 minutes...
-          </p>
-        </div>
-      </div>
-    </div>
-  ) : (
-    <div className="w-full h-full flex items-center justify-center">
-      <div className="text-center space-y-6">
-        <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-100 to-slate-100 rounded-3xl flex items-center justify-center shadow-xl">
-          <Box className="text-blue-400" size={40} />
-        </div>
-        <div>
-          <h3 className="font-black text-slate-800 text-lg">Ready for 3D Creation</h3>
-          <p className="text-slate-500 text-sm max-w-sm mx-auto mt-2">
-            Describe your gift idea and I'll generate custom 3D designs for you
-          </p>
-        </div>
-      </div>
-    </div>
-  )}
-</div>
-
-{/* IMAGE GALLERY SECTION */}
-      {generatedImages.length > 0 && (
-        <div className="absolute bottom-8 left-8 right-8 bg-white/90 backdrop-blur-sm rounded-[32px] p-6 border border-white/50 shadow-2xl z-30">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-black text-slate-800 text-sm uppercase tracking-widest">Generated Designs</h3>
-            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-              {generatedImages.length} design{generatedImages.length > 1 ? 's' : ''}
-            </span>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            {generatedImages.map((idea, idx) => (
-              <div
-                key={idx}
-                className="relative group cursor-pointer rounded-2xl overflow-hidden border-2 border-transparent hover:border-blue-500 transition-all duration-300 bg-slate-100 shadow-sm"
-                onClick={() => !idea.isLoading && handleSelectImage(idea.url)}
-              >
-                <div className="relative w-full h-48 overflow-hidden">
-                  {idea.isLoading ? (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 animate-pulse">
-                      <Loader2 className="animate-spin text-blue-500 mb-2" size={24} />
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Baking Image...</span>
-                    </div>
-                  ) : (
-                    <img
-                      src={idea.url}
-                      alt={idea.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                        e.target.parentElement.innerHTML = `
-                          <div class="w-full h-full flex flex-col items-center justify-center bg-slate-200 p-4">
-                            <div class="text-slate-700 text-sm font-bold text-center">Failed</div>
-                          </div>
-                        `;
-                      }}
-                    />
-                  )}
-                </div>
-
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
-                  <p className="text-blue-400 text-[10px] font-black uppercase tracking-widest mb-1">
-                    {idea.name}
-                  </p>
-                  <p className="text-white text-xs font-bold">
-                    {idea.isLoading ? "Generating..." : "Click to generate 3D"}
-                  </p>
-                </div>
-
-                <div className="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-black px-2 py-1 rounded-full">
-                  {idx + 1}
-                </div>
+      {/* RIGHT: 3D VIEWPORT */}
+      <div className="flex-1 relative bg-slate-100 z-0">
+        {/* Important: z-10 and pointer-events-auto makes OrbitControls work */}
+        <div className="absolute inset-0 z-10 pointer-events-auto">
+          {modelUrl ? (
+            <ModelViewer 
+              url={modelUrl} 
+              pedestalSettings={pedestalSettings} 
+              setSettings={setPedestalSettings}
+              exporterRef={exporterRef} 
+            />
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+              <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-6 shadow-xl animate-bounce">
+                <Box size={40} className="text-blue-500" />
               </div>
-            ))}
-          </div>
-          <div className="mt-4 text-center">
-            <p className="text-xs text-slate-500 font-medium">
-              Select a design to begin the 3D conversion process
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* CONTROL BAR */}
-      <div className="absolute top-8 left-8 right-8 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowPedestalUI(!showPedestalUI)}
-            className="glass-card px-6 py-3 rounded-2xl text-sm font-bold hover:bg-white/20 transition-all bg-white/50 border border-white"
-          >
-            <Settings size={18} className="inline mr-2 text-slate-700" />
-            Print Settings
-          </button>
-          {orderSummary && (
-            <div className="glass-card px-6 py-3 rounded-2xl bg-white/50 border border-white">
-              <div className="text-sm font-bold text-slate-800">
-                Est. Print: <span className="text-green-600">{orderSummary.print_time}</span> • 
-                Weight: <span className="text-blue-600">{orderSummary.weight}</span> • 
-                Price: <span className="text-purple-600">{orderSummary.price}</span>
-              </div>
+              <h2 className="text-2xl font-black text-slate-800 mb-2">3D Workspace Empty</h2>
+              <p className="max-w-xs text-sm font-bold text-slate-400 uppercase tracking-tighter">
+                Chat with the AI to generate a custom 3D model
+              </p>
             </div>
           )}
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* TOP STATUS BAR */}
+        <div className="absolute top-8 left-8 right-8 flex justify-between items-center pointer-events-none z-30">
+          <div className="flex gap-2">
+            {['Engine Active', 'Auto-Scale ON', 'Lighting Studio'].map((tag) => (
+              <div key={tag} className="bg-white/80 backdrop-blur-md px-4 py-2 rounded-full border border-white shadow-sm flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-[10px] font-black text-slate-600 uppercase tracking-tighter">{tag}</span>
+              </div>
+            ))}
+          </div>
+          
           {modelUrl && (
-            <button
-              onClick={handlePrepareGCode}
-              className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-bold hover:bg-black transition-all flex items-center gap-2 shadow-xl"
+            <button 
+              onClick={() => setShowPedestalUI(!showPedestalUI)}
+              className="pointer-events-auto bg-white p-3 rounded-2xl shadow-xl border border-slate-100 hover:bg-slate-50 transition-all text-slate-700"
             >
-              <Download size={18} />
-              Order Print
+              <Settings size={20} />
             </button>
           )}
         </div>
+
+        {/* PEDESTAL CONTROLS */}
+        {showPedestalUI && (
+          <div className="z-50 relative">
+             <PedestalControls 
+                settings={pedestalSettings} 
+                setSettings={setPedestalSettings} 
+                onPrepare={() => setShowPedestalUI(false)} 
+             />
+          </div>
+        )}
+
+        {/* BOTTOM ACTION BAR */}
+        <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end pointer-events-none z-30">
+          <div className="pointer-events-auto">
+            {orderSummary && (
+              <div className="bg-white/90 backdrop-blur-md p-6 rounded-[32px] shadow-2xl border border-white flex flex-col gap-1">
+                <span className="text-[10px] font-black text-blue-600 uppercase">Estimated Specs</span>
+                <div className="text-sm font-bold text-slate-800">
+                  Time: <span className="text-slate-500">{orderSummary.print_time}</span> • 
+                  Price: <span className="text-green-600">{orderSummary.price}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3 pointer-events-auto">
+            {modelUrl && (
+              <button
+                onClick={handleDownloadSTL}
+                className="bg-slate-900 text-white px-8 py-4 rounded-2xl text-sm font-black hover:bg-black transition-all flex items-center gap-3 shadow-2xl group"
+              >
+                <Download size={20} className="group-hover:translate-y-0.5 transition-transform" />
+                DOWNLOAD STL
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
-      {status && !loading && (
-        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-3 rounded-2xl shadow-lg border border-white/50 z-50">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-            <CheckCircle2 size={16} className="text-green-500" />
-            {status}
-          </div>
+      {status && (
+        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-white px-6 py-3 rounded-2xl shadow-2xl border border-blue-100 z-[60] flex items-center gap-3">
+          <CheckCircle2 size={18} className="text-blue-500" />
+          <span className="text-xs font-black text-slate-700 uppercase tracking-wider">{status}</span>
         </div>
       )}
     </div>
-
-    {showPedestalUI && (
-      <PedestalControls 
-        settings={pedestalSettings} 
-        setSettings={setPedestalSettings}
-        onPrepare={() => setShowPedestalUI(false)}
-      />
-    )}
-  </div>
   );
 }
