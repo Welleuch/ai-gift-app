@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
-import { Send, Loader2, Box, Sparkles, Cpu, Layers, Download, CheckCircle2, Settings } from 'lucide-react';
+import { Send, Loader2, Box, Sparkles, Download, Settings } from 'lucide-react';
 import PedestalControls from '../components/PedestalControls';
 
 const API_BASE = "https://3d-gift-manager.walid-elleuch.workers.dev";
@@ -34,14 +34,7 @@ export default function Home() {
   const [orderSummary, setOrderSummary] = useState(null);
   
   const [pedestalSettings, setPedestalSettings] = useState({
-    shape: 'box',
-    height: 10,
-    width: 60,
-    depth: 60,
-    text: '',
-    offset: 10,
-    scale: 1.0,
-    modelZOffset: 0
+    shape: 'box', height: 10, width: 60, depth: 60, text: '', offset: 10, scale: 1.0, modelZOffset: 0
   });
 
   const chatEndRef = useRef(null);
@@ -149,7 +142,7 @@ export default function Home() {
         
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'start'}`}>
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium shadow-sm whitespace-pre-wrap ${
                 m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
               }`}>
@@ -160,7 +153,8 @@ export default function Home() {
                       <img 
                         key={idx} 
                         src={imgUrl} 
-                        className="rounded-lg cursor-pointer hover:opacity-80 transition border border-white/20 shadow-sm" 
+                        alt="AI proposal"
+                        className="rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/20 shadow-sm" 
                         onClick={() => generate3DModel(m.content)} 
                       />
                     ))}
@@ -180,9 +174,16 @@ export default function Home() {
 
         <div className="p-6 bg-slate-50 border-t border-slate-200">
           <div className="relative flex items-center">
-            <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Describe your gift idea..." className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm focus:ring-4 focus:ring-blue-500/10 outline-none" />
-            <button onClick={handleSend} disabled={loading} className="absolute right-2 p-3 bg-slate-900 text-white rounded-xl hover:bg-black disabled:opacity-50"><Send size={18} /></button>
+            <input 
+              type="text" value={input} 
+              onChange={(e) => setInput(e.target.value)} 
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Describe your gift idea..." 
+              className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm focus:ring-4 focus:ring-blue-500/10 outline-none" 
+            />
+            <button onClick={handleSend} disabled={loading} className="absolute right-2 p-3 bg-slate-900 text-white rounded-xl hover:bg-black disabled:opacity-50">
+              <Send size={18} />
+            </button>
           </div>
         </div>
       </div>
