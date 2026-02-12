@@ -77,42 +77,50 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const d = pedestalSettings.depth / 10;
   const yOffset = pedestalSettings.offset / 10;
 
-  return (
-  <group>
-    {/* 1. CHARACTER POSITIONING */}
-    <Center 
-      bottom 
-      // Use the slider value from settings, default to 0 if not yet set
-      position={[0, yOffset, (pedestalSettings.modelZOffset / 10) || 0]} 
-    >
-      <primitive 
-        object={scene} 
-        scale={pedestalSettings.scale} 
-        onError={() => setModelError(true)} 
-      />
-    </Center>
-
-    {/* 2. PEDESTAL & TEXT */}
-    <group position={[0, -h / 2, 0]}>
-      <mesh ref={pedestalMeshRef}>
-        {/* ... (keep existing cylinder/box logic) */}
-      </mesh>
-
-      <Text 
-        position={[0, h / 2 + 0.05, d / 4]} 
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.3} 
-        color="#ff0000" // Set back to "#1e293b" once you confirm it works
-        anchorX="center"
-        anchorY="middle"
-        maxWidth={w * 0.9}
+ return (
+    <group>
+      {/* 1. CHARACTER POSITIONING */}
+      {/* We use position directly on Center to move the model relative to the world 0,0,0 */}
+      <Center 
+        bottom 
+        position={[0, yOffset, (pedestalSettings.modelZOffset / 10) || 0]} 
       >
-        {pedestalSettings.text || "DESIGN READY"}
-      </Text>
+        <primitive 
+          object={scene} 
+          scale={pedestalSettings.scale} 
+          onError={() => setModelError(true)} 
+        />
+      </Center>
+
+      {/* 2. PEDESTAL & TEXT */}
+      {/* Removed the negative Y offset to keep the pedestal resting ON the grid */}
+      <group position={[0, h / 2, 0]}>
+        <mesh ref={pedestalMeshRef}>
+          {pedestalSettings.shape === 'cylinder' ? (
+            <cylinderGeometry args={[w/2, w/2, h, 64]} />
+          ) : (
+            <RoundedBox args={[w, h, d]} radius={0.1} smoothness={4}>
+               <meshStandardMaterial color="#cbd5e1" />
+            </RoundedBox>
+          )}
+          <meshStandardMaterial color="#cbd5e1" />
+        </mesh>
+
+        {/* 3. TEXT - Lifted slightly above the top surface (h/2) */}
+        <Text 
+          position={[0, h / 2 + 0.02, d / 4]} 
+          rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={0.2} // Reduced size to fit better on top
+          color="#1e293b" // Changed back from Red to Dark Slate
+          anchorX="center"
+          anchorY="middle"
+          maxWidth={w * 0.9}
+        >
+          {pedestalSettings.text || ""}
+        </Text>
+      </group>
     </group>
-  </group>
-);
-});
+  );
 
 // IMPORTANT: Name the component for the forwardRef
 Model.displayName = "Model";
