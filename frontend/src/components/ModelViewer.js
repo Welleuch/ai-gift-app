@@ -1,7 +1,8 @@
 "use client";
 import { Suspense, useRef, useImperativeHandle, forwardRef, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stage, useGLTF, RoundedBox, Text } from '@react-three/drei';
+// FIXED: Proper imports from drei
+import { OrbitControls, Stage, useGLTF, RoundedBox, Text, Center } from '@react-three/drei';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
@@ -10,7 +11,6 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   const pedestalMeshRef = useRef();
   const hasAutoScaled = useRef(false);
 
-  // 1. Stability Fix: Handle Auto-Scaling & Initial Lighting
   useEffect(() => {
     if (scene && !hasAutoScaled.current) {
       const box = new THREE.Box3().setFromObject(scene);
@@ -21,13 +21,11 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
       const currentMax = Math.max(size.x, size.y, size.z);
       const calculatedScale = targetSize / currentMax;
       
-      // Center the model correctly
       scene.position.x = -center.x * calculatedScale;
       scene.position.y = -box.min.y * calculatedScale; 
       scene.position.z = -center.z * calculatedScale;
       scene.scale.setScalar(calculatedScale);
 
-      // Pass scale back to parent so sliders start at the right spot
       if (setSettings) {
         setTimeout(() => {
           setSettings(prev => ({
@@ -39,9 +37,8 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
       }
       hasAutoScaled.current = true;
     }
-  }, [scene, url]);
+  }, [scene, url, pedestalSettings.width, pedestalSettings.height, setSettings]);
 
-  // 2. STL Export Logic (Stable)
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
       const exporter = new STLExporter();
@@ -72,12 +69,10 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
 
   return (
     <group>
-      {/* Model Group with Sliders */}
       <group position={[0, pedestalSettings.offset / 10, (pedestalSettings.modelZOffset / 10) || 0]}>
           <primitive object={scene} scale={pedestalSettings.scale} />
       </group>
 
-      {/* Pedestal Group */}
       <group position={[0, h / 2, 0]}>
         <mesh ref={pedestalMeshRef}>
           {pedestalSettings.shape === 'cylinder' ? (
@@ -113,7 +108,6 @@ export default function ModelViewer({ url, pedestalSettings, setSettings, export
       <Canvas shadows camera={{ position: [5, 5, 5], fov: 35 }}>
         <color attach="background" args={['#f8fafc']} />
         <Suspense fallback={null}>
-          {/* STAGE IS WHAT GAVE V1.0.0 THE GREAT LOOK */}
           <Stage environment="city" intensity={0.6} contactShadow={true} adjustCamera={false}>
             <Model 
               ref={exporterRef} 
