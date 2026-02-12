@@ -11,25 +11,34 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   const pedestalMeshRef = useRef();
   const hasAutoScaled = useRef(false);
 
- useEffect(() => {
+useEffect(() => {
     if (scene && !hasAutoScaled.current) {
-      // 1. Get dimensions
+      // Restore original materials if they were accidentally changed
+      scene.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+          // Ensure the material can reflect the 'city' environment
+          if (child.material) {
+            child.material.envMapIntensity = 1;
+            child.material.needsUpdate = true;
+          }
+        }
+      });
+
       const box = new THREE.Box3().setFromObject(scene);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
 
-      // 2. Scale it to fit the pedestal width
       const targetSize = (pedestalSettings.width / 10) * 0.7; 
       const currentMax = Math.max(size.x, size.y, size.z);
       const calculatedScale = targetSize / currentMax;
       
-      // 3. Center and Ground it (Don't touch materials!)
       scene.position.x = -center.x * calculatedScale;
       scene.position.y = -box.min.y * calculatedScale; 
       scene.position.z = -center.z * calculatedScale;
       scene.scale.setScalar(calculatedScale);
 
-      // 4. Update the parent state so the "Model Lift" slider works
       if (typeof setSettings === 'function') {
         setTimeout(() => {
           setSettings(prev => ({
@@ -42,7 +51,8 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
 
       hasAutoScaled.current = true;
     }
-  }, [scene, url]);
+  }, [scene, url, pedestalSettings.width, pedestalSettings.height]);
+
 
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
