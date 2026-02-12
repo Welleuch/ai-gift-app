@@ -77,7 +77,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const d = pedestalSettings.depth / 10;
   const yOffset = pedestalSettings.offset / 10;
 
- return (
+return (
     <group>
       {/* 1. CHARACTER POSITIONING */}
       {/* We use position directly on Center to move the model relative to the world 0,0,0 */}
@@ -121,6 +121,7 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
       </group>
     </group>
   );
+});
 
 // IMPORTANT: Name the component for the forwardRef
 Model.displayName = "Model";
