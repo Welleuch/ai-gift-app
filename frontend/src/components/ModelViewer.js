@@ -13,6 +13,21 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
 
   useEffect(() => {
     if (scene && !hasAutoScaled.current) {
+      // --- NEW: FORCE LIGHTING ON MODEL ---
+      scene.traverse((child) => {
+        if (child.isMesh) {
+          // Give it a standard grey material that catches light
+          child.material = new THREE.MeshStandardMaterial({ 
+            color: "#ffffff", 
+            metalness: 0.1, 
+            roughness: 0.5 
+          });
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      // ------------------------------------
+
       const box = new THREE.Box3().setFromObject(scene);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
@@ -26,20 +41,19 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
       scene.position.z = -center.z * calculatedScale;
       scene.scale.setScalar(calculatedScale);
 
-      // We use a small delay to update the parent state safely
-      setTimeout(() => {
-        if (setSettings) {
+      if (setSettings) {
+        setTimeout(() => {
           setSettings(prev => ({
             ...prev,
-            scale: calculatedScale, 
-            offset: pedestalSettings.height // Lift to top of pedestal
+            scale: calculatedScale,
+            offset: pedestalSettings.height
           }));
-        }
-      }, 50);
+        }, 50);
+      }
 
       hasAutoScaled.current = true;
     }
-  }, [scene, url]); // Only run when a new model URL arrives
+  }, [scene, url]);
 
   useEffect(() => {
     hasAutoScaled.current = false;
@@ -123,8 +137,8 @@ export default function ModelViewer({ url, pedestalSettings, setSettings, export
     <div className="w-full h-full" style={{ touchAction: 'none' }}>
       <Canvas shadows camera={{ position: [5, 5, 5], fov: 35 }}>
         <color attach="background" args={['#f8fafc']} />
-        <ambientLight intensity={0.8} />
-        <pointLight position={[10, 10, 10]} intensity={1} />
+        <ambientLight intensity={1.5} />
+        <pointLight position={[10, 10, 10]} intensity={2} />
         <Suspense fallback={null}>
             <Model 
               ref={exporterRef} 
