@@ -1,6 +1,7 @@
 "use client";
 import { Suspense, useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
+// ADDED useGLTF TO THE LINE BELOW
 import { OrbitControls, Center, Text, RoundedBox, Bounds, ContactShadows, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
@@ -11,7 +12,6 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   const hasAutoScaled = useRef(false);
 
   useEffect(() => {
-    // Only auto-scale when the scene exists and we haven't done it for this specific URL
     if (scene && !hasAutoScaled.current) {
       const box = new THREE.Box3().setFromObject(scene);
       const size = box.getSize(new THREE.Vector3());
@@ -21,29 +21,26 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
       const currentMax = Math.max(size.x, size.y, size.z);
       const calculatedScale = targetSize / currentMax;
       
-      // Ground the model
       scene.position.x = -center.x * calculatedScale;
       scene.position.y = -box.min.y * calculatedScale; 
       scene.position.z = -center.z * calculatedScale;
       scene.scale.setScalar(calculatedScale);
 
-      // Use a safe update to move sliders without crashing
+      // We use a small delay to update the parent state safely
       setTimeout(() => {
-        if (typeof setSettings === 'function') {
-    setSettings(prev => ({
-      ...prev,
-      scale: calculatedScale, 
-      // This ensures the "Lift" slider starts at the top of the base
-      offset: pedestalSettings.height 
-    }));
-  }
-}, 50);
+        if (setSettings) {
+          setSettings(prev => ({
+            ...prev,
+            scale: calculatedScale, 
+            offset: pedestalSettings.height // Lift to top of pedestal
+          }));
+        }
+      }, 50);
 
       hasAutoScaled.current = true;
     }
-  }, [scene, url, pedestalSettings.width, setSettings]);
+  }, [scene, url]); // Only run when a new model URL arrives
 
-  // Reset the lock if the model changes
   useEffect(() => {
     hasAutoScaled.current = false;
   }, [url]);
@@ -62,13 +59,11 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
         const finalM = new THREE.Matrix4().multiplyMatrices(matrix, mesh.matrixWorld);
         for (let i = 0; i < pos.count; i++) {
           const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(finalM);
-          // Export: Y is UP in Three.js, but Z is UP in STL
           allVertices.push(v.x * 10, v.z * 10, (v.y * 10));
         }
       };
 
       const modelM = new THREE.Matrix4().makeScale(pedestalSettings.scale, pedestalSettings.scale, pedestalSettings.scale);
-      // This matches the visual position
       modelM.setPosition(0, (pedestalSettings.offset / 10), (pedestalSettings.modelZOffset / 10) || 0);
 
       scene.traverse(c => { if (c.isMesh) extract(c, modelM); });
@@ -88,12 +83,10 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
 
   return (
     <group>
-      {/* Character Group - Moved by 'offset' (Y) and 'modelZOffset' (Z) */}
       <group position={[0, modelY, modelZ]}>
           <primitive object={scene} scale={pedestalSettings.scale} />
       </group>
 
-      {/* Pedestal - Bottom is at 0 */}
       <group position={[0, h / 2, 0]}>
         <mesh ref={pedestalMeshRef}>
           {pedestalSettings.shape === 'cylinder' ? (
@@ -137,12 +130,11 @@ export default function ModelViewer({ url, pedestalSettings, setSettings, export
               ref={exporterRef} 
               url={url} 
               pedestalSettings={pedestalSettings} 
-              setSettings={setPedestalSettings}
-  exporterRef={exporterRef}
+              setSettings={setSettings} 
             />
             <ContactShadows opacity={0.4} scale={20} blur={2} far={4.5} />
         </Suspense>
-        <OrbitControls makeDefault enableDamping dampingFactor={0.05} />
+        <OrbitControls makeDefault />
       </Canvas>
     </div>
   );
