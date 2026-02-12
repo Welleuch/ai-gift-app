@@ -61,6 +61,15 @@ export default function PedestalControls({ settings, setSettings, onPrepare }) {
 
           <DimensionSlider label="Model Scale" val={settings.scale} min={0.1} max={3.0} step={0.1}
             onChange={(v) => setSettings({...settings, scale: v})} color="accent-green-500" />
+<DimensionSlider 
+  label="Model Back/Front" 
+  val={settings.modelZOffset || 0} 
+  min={-50} 
+  max={50} 
+  step={1}
+  onChange={(v) => setSettings({...settings, modelZOffset: v})} 
+  color="accent-purple-500" 
+/>
         </div>
 
         {/* Text Input */}

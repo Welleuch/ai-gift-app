@@ -78,41 +78,40 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const yOffset = pedestalSettings.offset / 10;
 
   return (
-    <group>
-      {/* 1. CHARACTER POSITIONING (Pushed back -d/3) */}
-      <group position={[0, yOffset, -d / 3]}> 
-        <Center bottom>
-          <primitive object={scene} scale={pedestalSettings.scale} onError={() => setModelError(true)} />
-        </Center>
-      </group>
+  <group>
+    {/* 1. CHARACTER POSITIONING */}
+    <Center 
+      bottom 
+      // Use the slider value from settings, default to 0 if not yet set
+      position={[0, yOffset, (pedestalSettings.modelZOffset / 10) || 0]} 
+    >
+      <primitive 
+        object={scene} 
+        scale={pedestalSettings.scale} 
+        onError={() => setModelError(true)} 
+      />
+    </Center>
 
-      {/* 2. PEDESTAL & TEXT */}
-      <group position={[0, -h / 2, 0]}>
-        <mesh ref={pedestalMeshRef}>
-          {pedestalSettings.shape === 'cylinder' ? (
-            <cylinderGeometry args={[w/2, w/2, h, 64]} />
-          ) : (
-            <RoundedBox args={[w, h, d]} radius={0.1} smoothness={4}>
-               <meshStandardMaterial color="#cbd5e1" />
-            </RoundedBox>
-          )}
-          <meshStandardMaterial color="#cbd5e1" />
-        </mesh>
+    {/* 2. PEDESTAL & TEXT */}
+    <group position={[0, -h / 2, 0]}>
+      <mesh ref={pedestalMeshRef}>
+        {/* ... (keep existing cylinder/box logic) */}
+      </mesh>
 
-        <Text 
-          position={[0, h / 2 + 0.05, d / 4]} 
-          rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={0.3} 
-          color="#ff0000" // BRIGHT RED TO VERIFY
-          anchorX="center"
-          anchorY="middle"
-          maxWidth={w * 0.9}
-        >
-          {pedestalSettings.text || "DESIGN READY"}
-        </Text>
-      </group>
+      <Text 
+        position={[0, h / 2 + 0.05, d / 4]} 
+        rotation={[-Math.PI / 2, 0, 0]}
+        fontSize={0.3} 
+        color="#ff0000" // Set back to "#1e293b" once you confirm it works
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={w * 0.9}
+      >
+        {pedestalSettings.text || "DESIGN READY"}
+      </Text>
     </group>
-  );
+  </group>
+);
 });
 
 // IMPORTANT: Name the component for the forwardRef
