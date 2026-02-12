@@ -30,13 +30,14 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
       // Use a safe update to move sliders without crashing
       setTimeout(() => {
         if (typeof setSettings === 'function') {
-          setSettings(prev => ({
-            ...prev,
-            scale: Number(calculatedScale.toFixed(3)), 
-            offset: Number(pedestalSettings.height) // Ground the model on the pedestal height
-          }));
-        }
-      }, 50);
+    setSettings(prev => ({
+      ...prev,
+      scale: calculatedScale, 
+      // This ensures the "Lift" slider starts at the top of the base
+      offset: pedestalSettings.height 
+    }));
+  }
+}, 50);
 
       hasAutoScaled.current = true;
     }
