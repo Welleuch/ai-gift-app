@@ -10,28 +10,44 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const pedestalMeshRef = useRef();
   const [modelError, setModelError] = useState(false);
 
-  useEffect(() => {
-    if (scene) {
-      const box = new THREE.Box3().setFromObject(scene);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
-      const maxSize = Math.max(size.x, size.y, size.z);
-      const scale = 1.5 / maxSize;
-      
-      scene.position.x = -center.x * scale;
-      scene.position.y = -center.y * scale;
-      scene.position.z = -center.z * scale;
-      scene.scale.setScalar(scale);
-      
-      scene.traverse((child) => {
-        if (child.isMesh) {
-          if (!child.material) child.material = new THREE.MeshStandardMaterial({ color: '#cbd5e1' });
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-    }
-  }, [scene]);
+useEffect(() => {
+  if (scene) {
+    // 1. Calculate the model's boundaries
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    // 2. AUTO-SCALE: Make the model roughly 80% of the pedestal's width
+    // pedestalSettings.width is in mm (e.g., 60), Three.js units are /10 (e.g., 6.0)
+    const targetSize = (pedestalSettings.width / 10) * 0.8; 
+    const currentMaxDimension = Math.max(size.x, size.y, size.z);
+    const autoScale = targetSize / currentMaxDimension;
+    
+    // 3. AUTO-POSITION: Center the model and place its bottom at Y=0
+    // This makes the 'primitive' pivot point its actual feet
+    scene.position.x = -center.x * autoScale;
+    scene.position.y = -box.min.y * autoScale; // Forces bottom to 0
+    scene.position.z = -center.z * autoScale;
+    scene.scale.setScalar(autoScale);
+
+    // 4. Update the settings so the sliders reflect this auto-calculation
+    // This prevents the "confused user" because the scale slider will move to the right spot
+    setSettings(prev => ({
+      ...prev,
+      scale: autoScale * 10, // Adjusting back to your slider's expected scale range
+      offset: (pedestalSettings.height / 2) // Lift it by half the pedestal height to sit on top
+    }));
+
+    scene.traverse((child) => {
+      if (child.isMesh) {
+        if (!child.material) child.material = new THREE.MeshStandardMaterial({ color: '#cbd5e1' });
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+  }
+}, [scene]);
+
 
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
@@ -82,8 +98,8 @@ return (
       {/* 1. CHARACTER POSITIONING */}
       {/* We use position directly on Center to move the model relative to the world 0,0,0 */}
       <Center 
-        bottom 
-        position={[0, yOffset, (pedestalSettings.modelZOffset / 10) || 0]} 
+         
+        position={[0, pedestalSettings.height / 20, (pedestalSettings.modelZOffset / 10) || 0]}
       >
         <primitive 
           object={scene} 
