@@ -114,8 +114,9 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
   const d = pedestalSettings.depth / 10;
   const yOffset = pedestalSettings.offset / 10;
 
-<group>
-      {/* 1.CHARACTER POSITIONING */}
+return (
+    <group>
+      {/* 1. CHARACTER POSITIONING */}
       {/* We use top property of Center or manual position on the group */}
       <group position={[0, yOffset, -d / 3]}> 
         <Center bottom>
@@ -156,7 +157,6 @@ const Model = forwardRef(({ url, pedestalSettings }, ref) => {
       </group>
     </group>
   );
-
 export default function ModelViewer({ url, pedestalSettings, exporterRef }) {
   if (!url) return null;
   
