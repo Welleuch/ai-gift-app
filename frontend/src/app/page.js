@@ -106,42 +106,60 @@ export default function Home() {
 };
 
  const generate3DModel = async (imageUrl) => {
-  setStatus('Generating 3D assets...');
+  setLoading(true);
+  setStatus('Starting 3D Generation...');
   try {
-    const response = await axios.post(`${API_BASE}/chat`, {
-      type: 'GEN_3D', // This matches your Worker switch case
+    const res = await axios.post(`${API_BASE}/chat`, {
+      type: 'GEN_3D',
       image_url: imageUrl
     });
-    
-    if (response.data.jobId) {
-      pollStatus(response.data.jobId);
+
+    if (res.data.jobId) {
+      pollStatus(res.data.jobId);
+    } else {
+      throw new Error(res.data.error || "Failed to start job");
     }
   } catch (err) {
     console.error("3D Start Error:", err);
-    setStatus("3D Generation failed.");
+    setStatus("3D Engine Busy. Try again.");
+    setLoading(false);
   }
 };
 
   const pollStatus = async (jobId) => {
-    const check = async () => {
-      try {
-        const res = await axios.get(
-          `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/status/${jobId}`,
-          { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
-        );
-        if (res.data.status === 'COMPLETED') {
-          setModelUrl(res.data.output.model_url || res.data.output);
-          setStatus("Model ready!");
-          setShowPedestalUI(true);
-        } else if (res.data.status === 'FAILED') {
-          setStatus("Generation failed.");
-        } else {
-          setTimeout(check, 3000);
-        }
-      } catch (e) { console.error(e); }
-    };
-    check();
+  const check = async () => {
+    try {
+      // Ask YOUR WORKER, not RunPod directly
+      const res = await axios.post(`${API_BASE}/chat`, {
+        type: 'CHECK_3D_STATUS',
+        jobId: jobId
+      });
+
+      const data = res.data; // This is the response from RunPod forwarded by your worker
+
+      if (data.status === 'COMPLETED') {
+        // RunPod returns results in data.output
+        const meshUrl = data.output.model_url || data.output;
+        setModelUrl(meshUrl);
+        setStatus("Model ready!");
+        setShowPedestalUI(true);
+        setLoading(false);
+      } else if (data.status === 'FAILED') {
+        setStatus("Generation failed.");
+        setLoading(false);
+      } else {
+        // Still processing (IN_QUEUE or IN_PROGRESS)
+        setStatus(`3D Printing in progress... ${data.status}`);
+        setTimeout(check, 3000);
+      }
+    } catch (e) {
+      console.error("Polling error:", e);
+      // Don't stop on one error, try again once
+      setTimeout(check, 5000);
+    }
   };
+  check();
+};
 
   const handleDownloadSTL = async () => {
     if (!exporterRef.current) return;
