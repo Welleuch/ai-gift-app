@@ -126,36 +126,48 @@ export default function Home() {
   }
 };
 
-  const pollStatus = async (jobId) => {
+ const pollStatus = async (jobId) => {
   const check = async () => {
     try {
-      // Ask YOUR WORKER, not RunPod directly
       const res = await axios.post(`${API_BASE}/chat`, {
         type: 'CHECK_3D_STATUS',
         jobId: jobId
       });
 
-      const data = res.data; // This is the response from RunPod forwarded by your worker
+      const data = res.data;
 
       if (data.status === 'COMPLETED') {
-        // RunPod returns results in data.output
-        const meshUrl = data.output.model_url || data.output;
-        setModelUrl(meshUrl);
-        setStatus("Model ready!");
-        setShowPedestalUI(true);
-        setLoading(false);
+        // --- THE CRITICAL FIX IS HERE ---
+        // RunPod output is often data.output.model_url or just data.output
+        let finalModelUrl = "";
+        
+        if (typeof data.output === 'string') {
+          finalModelUrl = data.output;
+        } else if (data.output && data.output.model_url) {
+          finalModelUrl = data.output.model_url;
+        } else if (Array.isArray(data.output) && data.output[0]) {
+          finalModelUrl = data.output[0];
+        }
+
+        if (finalModelUrl && typeof finalModelUrl === 'string') {
+          console.log("Loading Model URL:", finalModelUrl);
+          setModelUrl(finalModelUrl); // This MUST be a string
+          setStatus("Model ready!");
+          setShowPedestalUI(true);
+        } else {
+          console.error("RunPod returned no URL string:", data);
+          setStatus("Error: Invalid model format received.");
+        }
+        
       } else if (data.status === 'FAILED') {
         setStatus("Generation failed.");
-        setLoading(false);
       } else {
-        // Still processing (IN_QUEUE or IN_PROGRESS)
-        setStatus(`3D Printing in progress... ${data.status}`);
+        setStatus(`3D Generation: ${data.status}...`);
         setTimeout(check, 3000);
       }
     } catch (e) {
       console.error("Polling error:", e);
-      // Don't stop on one error, try again once
-      setTimeout(check, 5000);
+      setTimeout(check, 4000);
     }
   };
   check();
