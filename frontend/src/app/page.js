@@ -44,54 +44,83 @@ export default function Home() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  if (!input.trim() || loading) return;
 
-    const userMsg = input;
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setLoading(true);
-    setStatus('Analyzing ideas...');
+  const userMsg = input;
+  setInput('');
+  setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+  setLoading(true);
+  setStatus('Brainstorming ideas...');
 
-    try {
-      const chatRes = await axios.post(`${API_BASE}/chat`, {
-        messages: [...messages, { role: 'user', content: userMsg }]
-      });
+  try {
+    // STEP 1: Get the Text Ideas from the Worker
+    const chatRes = await axios.post(`${API_BASE}/chat`, {
+      type: 'CHAT', // Explicitly tell the worker we want the CHAT workflow
+      message: userMsg 
+    });
 
-      if (chatRes.data.status === "success") {
-        if (chatRes.data.images) {
-           setMessages(prev => [...prev, { 
-             role: 'assistant', 
-             content: "Here are the designs I generated:",
-             images: chatRes.data.images 
-           }]);
-        } else if (chatRes.data.ideas) {
-          const ideasText = chatRes.data.ideas.map(i => i.name).join(", ");
-          setMessages(prev => [...prev, { role: 'assistant', content: "Ideas: " + ideasText }]);
+    if (chatRes.data.status === "success" && chatRes.data.ideas) {
+      const ideas = chatRes.data.ideas;
+      
+      // Add the text message to the chat immediately
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "I've come up with 3 designs. Generating previews now...",
+        images: [] // Initialize empty images array
+      }]);
+
+      // STEP 2: Generate images for each idea one by one
+      const generatedImages = [];
+      for (let i = 0; i < ideas.length; i++) {
+        setStatus(`Generating preview ${i + 1}/3...`);
+        
+        const imgRes = await axios.post(`${API_BASE}/chat`, {
+          type: 'GEN_IMAGE',
+          visual: ideas[i].visual,
+          name: ideas[i].name,
+          index: i
+        });
+
+        if (imgRes.data.url) {
+          generatedImages.push(imgRes.data.url);
+          
+          // Update the message LIVE so images pop in as they are ready
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMsg = newMessages[newMessages.length - 1];
+            if (lastMsg.role === 'assistant') {
+              lastMsg.images = [...generatedImages];
+            }
+            return newMessages;
+          });
         }
       }
-    } catch (err) {
-      console.error("Chat Error:", err);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Error connecting to AI." }]);
-    } finally {
-      setLoading(false);
-      setStatus('');
     }
-  };
+  } catch (err) {
+    console.error("Chat Error:", err);
+    setMessages(prev => [...prev, { role: 'assistant', content: "I had trouble generating those designs. Please try again." }]);
+  } finally {
+    setLoading(false);
+    setStatus('');
+  }
+};
 
-  const generate3DModel = async (prompt) => {
-    setStatus('Generating 3D assets...');
-    try {
-      const response = await axios.post(
-        `https://api.runpod.ai/v2/${RUNPOD_ENDPOINT_ID}/run`,
-        { input: { prompt, mode: "preview" } },
-        { headers: { 'Authorization': `Bearer ${RUNPOD_API_KEY}` } }
-      );
-      pollStatus(response.data.id);
-    } catch (err) {
-      console.error("RunPod Error:", err);
-      setStatus("3D Generation failed.");
+ const generate3DModel = async (imageUrl) => {
+  setStatus('Generating 3D assets...');
+  try {
+    const response = await axios.post(`${API_BASE}/chat`, {
+      type: 'GEN_3D', // This matches your Worker switch case
+      image_url: imageUrl
+    });
+    
+    if (response.data.jobId) {
+      pollStatus(response.data.jobId);
     }
-  };
+  } catch (err) {
+    console.error("3D Start Error:", err);
+    setStatus("3D Generation failed.");
+  }
+};
 
   const pollStatus = async (jobId) => {
     const check = async () => {
@@ -149,16 +178,18 @@ export default function Home() {
                 {m.content}
                 {m.images && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
-                    {m.images.map((imgUrl, idx) => (
-                      <img 
-                        key={idx} 
-                        src={imgUrl} 
-                        alt="AI proposal"
-                        className="rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/20 shadow-sm" 
-                        onClick={() => generate3DModel(m.content)} 
-                      />
-                    ))}
-                  </div>
+    {m.images.map((imgUrl, idx) => (
+      <img 
+        key={idx} 
+        src={imgUrl} 
+        alt="AI Proposal"
+        className="rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/20 shadow-sm" 
+        
+        /* THIS IS THE SPECIFIC LINE TO UPDATE */
+        onClick={() => generate3DModel(imgUrl)} 
+      />
+    ))}
+  </div>
                 )}
               </div>
             </div>
