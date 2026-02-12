@@ -136,34 +136,31 @@ export default function Home() {
 
       const data = res.data;
 
+      // --- START OF NEW COMPLETED BLOCK ---
       if (data.status === 'COMPLETED') {
-        // --- THE CRITICAL FIX IS HERE ---
-        // RunPod output is often data.output.model_url or just data.output
-        let finalModelUrl = "";
+        // Since your new worker returns the URL directly in data.output:
+        const meshUrl = data.output; 
         
-        if (typeof data.output === 'string') {
-          finalModelUrl = data.output;
-        } else if (data.output && data.output.model_url) {
-          finalModelUrl = data.output.model_url;
-        } else if (Array.isArray(data.output) && data.output[0]) {
-          finalModelUrl = data.output[0];
-        }
-
-        if (finalModelUrl && typeof finalModelUrl === 'string') {
-          console.log("Loading Model URL:", finalModelUrl);
-          setModelUrl(finalModelUrl); // This MUST be a string
+        console.log("3D Model URL received:", meshUrl);
+        
+        if (meshUrl && typeof meshUrl === 'string') {
+          setModelUrl(meshUrl);
           setStatus("Model ready!");
           setShowPedestalUI(true);
+          setLoading(false);
         } else {
-          console.error("RunPod returned no URL string:", data);
-          setStatus("Error: Invalid model format received.");
+          console.error("Invalid model path received from local PC:", data);
+          setStatus("Error: Local file path is missing.");
+          setLoading(false);
         }
-        
+      // --- END OF NEW COMPLETED BLOCK ---
+
       } else if (data.status === 'FAILED') {
         setStatus("Generation failed.");
+        setLoading(false);
       } else {
-        setStatus(`3D Generation: ${data.status}...`);
-        setTimeout(check, 3000);
+        setStatus(`Local PC Processing...`);
+        setTimeout(check, 3000); // Check every 3 seconds
       }
     } catch (e) {
       console.error("Polling error:", e);
