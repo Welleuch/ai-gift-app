@@ -332,16 +332,15 @@ const handleSelectImage = async (imgUrl) => {
       </div>
 
       {/* MAIN WORKBENCH */}
-      <div className="flex-1 relative">
-        {/* 3D VIEWER */}
-        <div className="absolute inset-0">
-  {modelUrl ? (
-    <ModelViewer 
-  url={modelUrl} 
-  pedestalSettings={pedestalSettings} 
-  setSettings={setPedestalSettings} 
-  exporterRef={exporterRef} 
-/>
+      <div className="flex-1 relative bg-slate-100">
+  <div className="absolute inset-0 z-10"> {/* Added z-10 */}
+    {modelUrl ? (
+      <ModelViewer 
+        url={modelUrl} 
+        pedestalSettings={pedestalSettings} 
+        setSettings={setPedestalSettings}
+        exporterRef={exporterRef} 
+      />
   ) : loading && status.includes('3D') ? (
     <div className="w-full h-full flex items-center justify-center">
       <div className="text-center space-y-6">

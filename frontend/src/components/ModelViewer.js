@@ -1,7 +1,7 @@
 "use client";
 import { Suspense, useRef, useImperativeHandle, forwardRef, useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Center, Text, RoundedBox, Bounds, ContactShadows } from '@react-three/drei';
+import { OrbitControls, Center, Text, RoundedBox, Bounds, ContactShadows, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter';
 
@@ -29,14 +29,14 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
 
       // Use a safe update to move sliders without crashing
       setTimeout(() => {
-        if (setSettings) {
+        if (typeof setSettings === 'function') {
           setSettings(prev => ({
             ...prev,
-            scale: calculatedScale, 
-            offset: pedestalSettings.height // Put it on top
+            scale: Number(calculatedScale.toFixed(3)), 
+            offset: Number(pedestalSettings.height) // Ground the model on the pedestal height
           }));
         }
-      }, 10);
+      }, 50);
 
       hasAutoScaled.current = true;
     }
@@ -136,7 +136,8 @@ export default function ModelViewer({ url, pedestalSettings, setSettings, export
               ref={exporterRef} 
               url={url} 
               pedestalSettings={pedestalSettings} 
-              setSettings={setSettings} 
+              setSettings={setPedestalSettings}
+  exporterRef={exporterRef}
             />
             <ContactShadows opacity={0.4} scale={20} blur={2} far={4.5} />
         </Suspense>
