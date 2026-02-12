@@ -65,29 +65,28 @@ export default function Home() {
       });
 
       if (chatRes.data.status === "success") {
-  // 1. If the worker sends images (The "Good Version" behavior)
-  if (chatRes.data.images) {
-     setMessages(prev => [...prev, { 
-  role: 'assistant', 
-  content: "Check out these designs!", 
-  images: chatRes.data.images // MUST matches the key from your Worker
-}]);
-  } 
-  
-  // 2. If the worker sends ideas (The current behavior)
-  else if (chatRes.data.ideas) {
-    const ideasText = chatRes.data.ideas.map(i => i.name).join(", ");
-    setMessages(prev => [...prev, { role: 'assistant', content: "Ideas: " + ideasText }]);
-  }
-}
- catch (err) {
+        if (chatRes.data.images) {
+          setMessages(prev => [...prev, { 
+            role: 'assistant', 
+            content: "Here are the designs I generated:",
+            images: chatRes.data.images 
+          }]);
+        } 
+        else if (chatRes.data.ideas) {
+          const ideasText = chatRes.data.ideas.map(i => i.name).join(", ");
+          setMessages(prev => [...prev, { role: 'assistant', content: "Ideas: " + ideasText }]);
+        }
+      }
+    } // <--- This was likely missing or misplaced
+    catch (err) {
       console.error("Chat Error:", err);
-      setMessages(prev => [...prev, { role: 'assistant', content: "I encountered an error connecting to the AI. Please try again." }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: "I encountered an error connecting to the AI." }]);
     } finally {
       setLoading(false);
       setStatus('');
     }
   };
+
 
   const generate3DModel = async (prompt) => {
     setStatus('Generating 3D assets...');
@@ -153,20 +152,12 @@ export default function Home() {
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
   {messages.map((m, i) => (
-    /* 1. Alignment Wrapper */
     <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-      
-      {/* 2. Chat Bubble */}
       <div className={`max-w-[85%] p-4 rounded-2xl text-sm font-medium shadow-sm whitespace-pre-wrap ${
-        m.role === 'user' 
-          ? 'bg-blue-600 text-white rounded-tr-none' 
-          : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
+        m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
       }`}>
-        
-        {/* The Text Content */}
         {m.content}
 
-        {/* 3. The Image Gallery (Added here) */}
         {m.images && (
           <div className="grid grid-cols-2 gap-2 mt-3">
             {m.images.map((imgUrl, idx) => (
@@ -183,7 +174,9 @@ export default function Home() {
       </div>
     </div>
   ))}
-  
+  {/* Loading indicator and scroll ref stay below here */}
+</div>
+
   {loading && (
     <div className="bg-slate-100 p-4 rounded-2xl flex items-center gap-3 animate-pulse w-fit">
       <Loader2 className="animate-spin text-blue-600" size={16} />
