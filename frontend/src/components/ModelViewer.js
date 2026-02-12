@@ -11,37 +11,26 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   const pedestalMeshRef = useRef();
   const hasAutoScaled = useRef(false);
 
-  useEffect(() => {
+ useEffect(() => {
     if (scene && !hasAutoScaled.current) {
-      // --- NEW: FORCE LIGHTING ON MODEL ---
-      scene.traverse((child) => {
-        if (child.isMesh) {
-          // Give it a standard grey material that catches light
-          child.material = new THREE.MeshStandardMaterial({ 
-            color: "#ffffff", 
-            metalness: 0.1, 
-            roughness: 0.5 
-          });
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      // ------------------------------------
-
+      // 1. Get dimensions
       const box = new THREE.Box3().setFromObject(scene);
       const size = box.getSize(new THREE.Vector3());
       const center = box.getCenter(new THREE.Vector3());
 
+      // 2. Scale it to fit the pedestal width
       const targetSize = (pedestalSettings.width / 10) * 0.7; 
       const currentMax = Math.max(size.x, size.y, size.z);
       const calculatedScale = targetSize / currentMax;
       
+      // 3. Center and Ground it (Don't touch materials!)
       scene.position.x = -center.x * calculatedScale;
       scene.position.y = -box.min.y * calculatedScale; 
       scene.position.z = -center.z * calculatedScale;
       scene.scale.setScalar(calculatedScale);
 
-      if (setSettings) {
+      // 4. Update the parent state so the "Model Lift" slider works
+      if (typeof setSettings === 'function') {
         setTimeout(() => {
           setSettings(prev => ({
             ...prev,
@@ -54,10 +43,6 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
       hasAutoScaled.current = true;
     }
   }, [scene, url]);
-
-  useEffect(() => {
-    hasAutoScaled.current = false;
-  }, [url]);
 
   useImperativeHandle(ref, () => ({
     exportSTL: () => {
@@ -137,17 +122,25 @@ export default function ModelViewer({ url, pedestalSettings, setSettings, export
     <div className="w-full h-full" style={{ touchAction: 'none' }}>
       <Canvas shadows camera={{ position: [5, 5, 5], fov: 35 }}>
         <color attach="background" args={['#f8fafc']} />
-        <ambientLight intensity={1.5} />
-        <pointLight position={[10, 10, 10]} intensity={2} />
+        
         <Suspense fallback={null}>
+          {/* Stage provides the professional lighting and reflections from v1.0.0 */}
+          <Stage 
+            environment="city" 
+            intensity={0.6} 
+            contactShadow={true} 
+            shadows="contact" 
+            adjustCamera={false}
+          >
             <Model 
               ref={exporterRef} 
               url={url} 
               pedestalSettings={pedestalSettings} 
               setSettings={setSettings} 
             />
-            <ContactShadows opacity={0.4} scale={20} blur={2} far={4.5} />
+          </Stage>
         </Suspense>
+
         <OrbitControls makeDefault />
       </Canvas>
     </div>
