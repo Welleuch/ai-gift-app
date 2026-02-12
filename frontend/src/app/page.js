@@ -41,9 +41,16 @@ export default function Home() {
   const [orderSummary, setOrderSummary] = useState(null);
   const [isOrdered, setIsOrdered] = useState(false);
 
-  const [pedestalSettings, setPedestalSettings] = useState({
-    shape: 'box', height: 10, width: 60, depth: 60, text: '', offset: 0, scale: 1.0
-  });
+ const [pedestalSettings, setPedestalSettings] = useState({
+  shape: 'box', 
+  height: 10, 
+  width: 60, 
+  depth: 60, 
+  text: '', 
+  offset: 0, 
+  scale: 1.0,
+  modelZOffset: 0
+});
 
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -330,10 +337,11 @@ const handleSelectImage = async (imgUrl) => {
         <div className="absolute inset-0">
   {modelUrl ? (
     <ModelViewer 
-      url={modelUrl} 
-      pedestalSettings={pedestalSettings} 
-      exporterRef={exporterRef} 
-    />
+  url={modelUrl} 
+  pedestalSettings={pedestalSettings} 
+  setSettings={setPedestalSettings} 
+  exporterRef={exporterRef} 
+/>
   ) : loading && status.includes('3D') ? (
     <div className="w-full h-full flex items-center justify-center">
       <div className="text-center space-y-6">
