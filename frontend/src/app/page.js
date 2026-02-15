@@ -114,10 +114,28 @@ export default function Home() {
       image_url: imageUrl
     });
 
-    if (res.data.jobId) {
-      pollStatus(res.data.jobId);
+    const data = res.data;
+
+    // --- NEW: IMMEDIATE COMPLETION CHECK ---
+    // If runsync finished the job instantly, use the output directly
+    if (data.status === 'COMPLETED' || data.status === 'success') {
+      const meshUrl = data.output;
+      console.log("3D Model received immediately:", meshUrl);
+      
+      if (meshUrl && typeof meshUrl === 'string') {
+        setModelUrl(meshUrl);
+        setStatus("Model ready!");
+        setShowPedestalUI(true);
+        setLoading(false);
+        return; // EXIT HERE: Do not start polling
+      }
+    }
+
+    // --- FALLBACK TO POLLING ---
+    if (data.jobId) {
+      pollStatus(data.jobId);
     } else {
-      throw new Error(res.data.error || "Failed to start job");
+      throw new Error(data.error || "Failed to start job");
     }
   } catch (err) {
     console.error("3D Start Error:", err);
@@ -136,12 +154,11 @@ export default function Home() {
 
       const data = res.data;
 
-      // --- START OF NEW COMPLETED BLOCK ---
-      if (data.status === 'COMPLETED') {
-        // Since your new worker returns the URL directly in data.output:
+      // Check for both 'COMPLETED' and 'success' statuses
+      if (data.status === 'COMPLETED' || data.status === 'success') {
         const meshUrl = data.output; 
         
-        console.log("3D Model URL received:", meshUrl);
+        console.log("3D Model URL received via polling:", meshUrl);
         
         if (meshUrl && typeof meshUrl === 'string') {
           setModelUrl(meshUrl);
@@ -149,18 +166,23 @@ export default function Home() {
           setShowPedestalUI(true);
           setLoading(false);
         } else {
-          console.error("Invalid model path received from local PC:", data);
-          setStatus("Error: Local file path is missing.");
+          console.error("Invalid model path received:", data);
+          setStatus("Error: Mesh URL missing in response.");
           setLoading(false);
         }
-      // --- END OF NEW COMPLETED BLOCK ---
 
       } else if (data.status === 'FAILED') {
-        setStatus("Generation failed.");
+        // Handle the "Job ID not found" race condition gracefully
+        if (data.error === "Job cleared from memory") {
+             setStatus("Job finished. Refreshing...");
+             // You could optionally trigger a final check of your R2 here
+        } else {
+             setStatus("Generation failed.");
+        }
         setLoading(false);
       } else {
         setStatus(`Local PC Processing...`);
-        setTimeout(check, 3000); // Check every 3 seconds
+        setTimeout(check, 3000); 
       }
     } catch (e) {
       console.error("Polling error:", e);
