@@ -74,10 +74,24 @@ export default function PedestalControls({ settings, setSettings, onPrepare }) {
 
         {/* Text Input */}
         <div>
-          <label className="text-[10px] font-black text-slate-500 uppercase block mb-2">Engraving</label>
-          <input type="text" maxLength={20} className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            value={settings.text} onChange={(e) => setSettings({...settings, text: e.target.value})} placeholder="Type here..."/>
-        </div>
+  <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Headline</label>
+  <input 
+    type="text" 
+    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm mb-3"
+    value={settings.textLine1} 
+    onChange={(e) => setSettings({...settings, textLine1: e.target.value})} 
+    placeholder="e.g. Happy Birthday!"
+  />
+  
+  <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Signature</label>
+  <input 
+    type="text" 
+    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm"
+    value={settings.textLine2} 
+    onChange={(e) => setSettings({...settings, textLine2: e.target.value})} 
+    placeholder="e.g. Love, Sarah 2024"
+  />
+</div>
 
         <button onClick={onPrepare} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-sm hover:bg-black transition-all flex items-center justify-center gap-2">
           <CheckCircle2 size={18} /> HIDE SETTINGS

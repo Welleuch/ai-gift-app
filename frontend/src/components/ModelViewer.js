@@ -84,16 +84,28 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
           )}
           <meshStandardMaterial color="#cbd5e1" />
         </mesh>
-        <Text 
-          position={[0, h / 2 + 0.02, d / 4]} 
-          rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={0.2} 
-          color="#1e293b"
-          anchorX="center"
-          anchorY="middle"
-        >
-          {pedestalSettings.text}
-        </Text>
+        // Headline (Line 1) - Bold/Script feel
+<Text 
+  position={[0, h / 2 + 0.02, d / 4 - 0.1]} // Positioned slightly higher
+  rotation={[-Math.PI / 2, 0, 0]}
+  fontSize={0.25} 
+  font="/fonts/Inter-Bold.woff" // You can specify local fonts
+  color="#1e293b"
+  anchorX="center"
+>
+  {pedestalSettings.textLine1}
+</Text>
+
+// Signature (Line 2) - Clean/Smaller
+<Text 
+  position={[0, h / 2 + 0.02, d / 4 + 0.2]} // Positioned below line 1
+  rotation={[-Math.PI / 2, 0, 0]}
+  fontSize={0.15} 
+  color="#475569"
+  anchorX="center"
+>
+  {pedestalSettings.textLine2}
+</Text>
       </group>
     </group>
   );

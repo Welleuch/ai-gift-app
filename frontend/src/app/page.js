@@ -34,7 +34,15 @@ export default function Home() {
   const [orderSummary, setOrderSummary] = useState(null);
   
   const [pedestalSettings, setPedestalSettings] = useState({
-    shape: 'box', height: 10, width: 60, depth: 60, text: '', offset: 10, scale: 1.0, modelZOffset: 0
+    shape: 'box',
+    height: 10,
+    width: 60,
+    depth: 60,
+    textLine1: '',      
+    textLine2: '',      
+    offset: 10,
+    scale: 1.0,
+    modelZOffset: 0    
   });
 
   const chatEndRef = useRef(null);
@@ -43,71 +51,79 @@ export default function Home() {
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const handleSend = async () => {
-  if (!input.trim() || loading) return;
+const handleSend = async () => {
+    if (!input.trim() || loading) return;
 
-  const userMsg = input;
-  setInput('');
-  setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-  setLoading(true);
-  setStatus('Brainstorming ideas...');
+    const userMsg = input;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setLoading(true);
+    setStatus('Brainstorming ideas...');
 
-  try {
-    // STEP 1: Get the Text Ideas from the Worker
-    const chatRes = await axios.post(`${API_BASE}/chat`, {
-      type: 'CHAT', // Explicitly tell the worker we want the CHAT workflow
-      message: userMsg 
-    });
+    try {
+      const chatRes = await axios.post(`${API_BASE}/chat`, {
+        type: 'CHAT',
+        message: userMsg 
+      });
 
-    if (chatRes.data.status === "success" && chatRes.data.ideas) {
-      const ideas = chatRes.data.ideas;
-      
-      // Add the text message to the chat immediately
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: "I've come up with 3 designs. Generating previews now...",
-        images: [] // Initialize empty images array
-      }]);
-
-      // STEP 2: Generate images for each idea one by one
-      const generatedImages = [];
-      for (let i = 0; i < ideas.length; i++) {
-        setStatus(`Generating preview ${i + 1}/3...`);
+      if (chatRes.data.status === "success" && chatRes.data.ideas) {
+        const ideas = chatRes.data.ideas;
         
-        const imgRes = await axios.post(`${API_BASE}/chat`, {
-          type: 'GEN_IMAGE',
-          visual: ideas[i].visual,
-          name: ideas[i].name,
-          index: i
-        });
+        setMessages(prev => [...prev, { 
+  role: 'assistant', 
+  content: "I've come up with 3 designs. Generating previews now...",
+  proposalData: ideas, // <-- ADD THIS LINE ONLY
+  images: [] 
+}]);
 
-        if (imgRes.data.url) {
-          generatedImages.push(imgRes.data.url);
+        const generatedImages = [];
+        for (let i = 0; i < ideas.length; i++) {
+          setStatus(`Generating preview ${i + 1}/3...`);
           
-          // Update the message LIVE so images pop in as they are ready
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMsg = newMessages[newMessages.length - 1];
-            if (lastMsg.role === 'assistant') {
-              lastMsg.images = [...generatedImages];
-            }
-            return newMessages;
+          const imgRes = await axios.post(`${API_BASE}/chat`, {
+            type: 'GEN_IMAGE',
+            visual: ideas[i].visual,
+            name: ideas[i].name,
+            index: i
           });
+
+          if (imgRes.data.url) {
+            generatedImages.push(imgRes.data.url);
+            
+            setMessages(prev => {
+              const newMessages = [...prev];
+              const lastMsg = newMessages[newMessages.length - 1];
+              if (lastMsg.role === 'assistant') {
+                lastMsg.images = [...generatedImages];
+              }
+              return newMessages;
+            });
+          }
         }
       }
+    } catch (err) {
+      console.error("Chat Error:", err);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Error. Try again." }]);
+    } finally {
+      setLoading(false);
+      setStatus('');
     }
-  } catch (err) {
-    console.error("Chat Error:", err);
-    setMessages(prev => [...prev, { role: 'assistant', content: "I had trouble generating those designs. Please try again." }]);
-  } finally {
-    setLoading(false);
-    setStatus('');
-  }
-};
+  };
 
- const generate3DModel = async (imageUrl) => {
+ const generate3DModel = async (imageUrl, index, proposalData) => {
   setLoading(true);
   setStatus('Starting 3D Generation...');
+
+  // --- NEW: Apply the AI-suggested text to the pedestal immediately ---
+  if (proposalData && proposalData[index]) {
+    setPedestalSettings(prev => ({
+      ...prev,
+      textLine1: proposalData[index].engravingHeadline || "",
+      textLine2: proposalData[index].engravingSignature || ""
+    }));
+    console.log("Applying engraving suggestions for idea #", index + 1);
+  }
+
   try {
     const res = await axios.post(`${API_BASE}/chat`, {
       type: 'GEN_3D',
@@ -116,18 +132,15 @@ export default function Home() {
 
     const data = res.data;
 
-    // --- NEW: IMMEDIATE COMPLETION CHECK ---
-    // If runsync finished the job instantly, use the output directly
+    // --- IMMEDIATE COMPLETION CHECK (for local Docker) ---
     if (data.status === 'COMPLETED' || data.status === 'success') {
       const meshUrl = data.output;
-      console.log("3D Model received immediately:", meshUrl);
-      
       if (meshUrl && typeof meshUrl === 'string') {
         setModelUrl(meshUrl);
         setStatus("Model ready!");
         setShowPedestalUI(true);
         setLoading(false);
-        return; // EXIT HERE: Do not start polling
+        return; 
       }
     }
 
@@ -225,20 +238,19 @@ export default function Home() {
                 m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
               }`}>
                 {m.content}
-                {m.images && (
-                  <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="grid grid-cols-2 gap-2 mt-3">
     {m.images.map((imgUrl, idx) => (
       <img 
         key={idx} 
         src={imgUrl} 
         alt="AI Proposal"
         className="rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/20 shadow-sm" 
-        
-        /* THIS IS THE SPECIFIC LINE TO UPDATE */
-        onClick={() => generate3DModel(imgUrl)} 
+        // UPDATED LINE BELOW
+        onClick={() => generate3DModel(imgUrl, idx, m.proposalData)} 
       />
     ))}
   </div>
+)}
                 )}
               </div>
             </div>
