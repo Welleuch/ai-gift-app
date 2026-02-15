@@ -7,8 +7,6 @@ import { Send, Loader2, Box, Sparkles, Download, Settings } from 'lucide-react';
 import PedestalControls from '../components/PedestalControls';
 
 const API_BASE = "https://3d-gift-manager.walid-elleuch.workers.dev";
-const RUNPOD_API_KEY = process.env.NEXT_PUBLIC_RUNPOD_API_KEY;
-const RUNPOD_ENDPOINT_ID = "nefvw8vdxu2yd3";
 
 const ModelViewer = dynamic(() => import('../components/ModelViewer'), {
   ssr: false,
@@ -51,7 +49,7 @@ export default function Home() {
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-const handleSend = async () => {
+  const handleSend = async () => {
     if (!input.trim() || loading) return;
 
     const userMsg = input;
@@ -70,11 +68,11 @@ const handleSend = async () => {
         const ideas = chatRes.data.ideas;
         
         setMessages(prev => [...prev, { 
-  role: 'assistant', 
-  content: "I've come up with 3 designs. Generating previews now...",
-  proposalData: ideas, // <-- ADD THIS LINE ONLY
-  images: [] 
-}]);
+          role: 'assistant', 
+          content: "I've come up with 3 designs. Generating previews now...",
+          proposalData: ideas,
+          images: [] 
+        }]);
 
         const generatedImages = [];
         for (let i = 0; i < ideas.length; i++) {
@@ -110,100 +108,81 @@ const handleSend = async () => {
     }
   };
 
- const generate3DModel = async (imageUrl, index, proposalData) => {
-  setLoading(true);
-  setStatus('Starting 3D Generation...');
+  const generate3DModel = async (imageUrl, index, proposalData) => {
+    setLoading(true);
+    setStatus('Starting 3D Generation...');
 
-  // --- NEW: Apply the AI-suggested text to the pedestal immediately ---
-  if (proposalData && proposalData[index]) {
-    setPedestalSettings(prev => ({
-      ...prev,
-      textLine1: proposalData[index].engravingHeadline || "",
-      textLine2: proposalData[index].engravingSignature || ""
-    }));
-    console.log("Applying engraving suggestions for idea #", index + 1);
-  }
-
-  try {
-    const res = await axios.post(`${API_BASE}/chat`, {
-      type: 'GEN_3D',
-      image_url: imageUrl
-    });
-
-    const data = res.data;
-
-    // --- IMMEDIATE COMPLETION CHECK (for local Docker) ---
-    if (data.status === 'COMPLETED' || data.status === 'success') {
-      const meshUrl = data.output;
-      if (meshUrl && typeof meshUrl === 'string') {
-        setModelUrl(meshUrl);
-        setStatus("Model ready!");
-        setShowPedestalUI(true);
-        setLoading(false);
-        return; 
-      }
+    if (proposalData && proposalData[index]) {
+      setPedestalSettings(prev => ({
+        ...prev,
+        textLine1: proposalData[index].engravingHeadline || "",
+        textLine2: proposalData[index].engravingSignature || ""
+      }));
     }
 
-    // --- FALLBACK TO POLLING ---
-    if (data.jobId) {
-      pollStatus(data.jobId);
-    } else {
-      throw new Error(data.error || "Failed to start job");
-    }
-  } catch (err) {
-    console.error("3D Start Error:", err);
-    setStatus("3D Engine Busy. Try again.");
-    setLoading(false);
-  }
-};
-
- const pollStatus = async (jobId) => {
-  const check = async () => {
     try {
       const res = await axios.post(`${API_BASE}/chat`, {
-        type: 'CHECK_3D_STATUS',
-        jobId: jobId
+        type: 'GEN_3D',
+        image_url: imageUrl
       });
 
       const data = res.data;
 
-      // Check for both 'COMPLETED' and 'success' statuses
       if (data.status === 'COMPLETED' || data.status === 'success') {
-        const meshUrl = data.output; 
-        
-        console.log("3D Model URL received via polling:", meshUrl);
-        
+        const meshUrl = data.output;
         if (meshUrl && typeof meshUrl === 'string') {
           setModelUrl(meshUrl);
           setStatus("Model ready!");
           setShowPedestalUI(true);
           setLoading(false);
-        } else {
-          console.error("Invalid model path received:", data);
-          setStatus("Error: Mesh URL missing in response.");
-          setLoading(false);
+          return; 
         }
-
-      } else if (data.status === 'FAILED') {
-        // Handle the "Job ID not found" race condition gracefully
-        if (data.error === "Job cleared from memory") {
-             setStatus("Job finished. Refreshing...");
-             // You could optionally trigger a final check of your R2 here
-        } else {
-             setStatus("Generation failed.");
-        }
-        setLoading(false);
-      } else {
-        setStatus(`Local PC Processing...`);
-        setTimeout(check, 3000); 
       }
-    } catch (e) {
-      console.error("Polling error:", e);
-      setTimeout(check, 4000);
+
+      if (data.jobId) {
+        pollStatus(data.jobId);
+      } else {
+        throw new Error(data.error || "Failed to start job");
+      }
+    } catch (err) {
+      console.error("3D Start Error:", err);
+      setStatus("3D Engine Busy. Try again.");
+      setLoading(false);
     }
   };
-  check();
-};
+
+  const pollStatus = async (jobId) => {
+    const check = async () => {
+      try {
+        const res = await axios.post(`${API_BASE}/chat`, {
+          type: 'CHECK_3D_STATUS',
+          jobId: jobId
+        });
+
+        const data = res.data;
+
+        if (data.status === 'COMPLETED' || data.status === 'success') {
+          const meshUrl = data.output; 
+          if (meshUrl && typeof meshUrl === 'string') {
+            setModelUrl(meshUrl);
+            setStatus("Model ready!");
+            setShowPedestalUI(true);
+            setLoading(false);
+          }
+        } else if (data.status === 'FAILED') {
+          setStatus("Generation failed.");
+          setLoading(false);
+        } else {
+          setStatus(`Local PC Processing...`);
+          setTimeout(check, 3000); 
+        }
+      } catch (e) {
+        console.error("Polling error:", e);
+        setTimeout(check, 4000);
+      }
+    };
+    check();
+  };
 
   const handleDownloadSTL = async () => {
     if (!exporterRef.current) return;
@@ -238,19 +217,20 @@ const handleSend = async () => {
                 m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
               }`}>
                 {m.content}
-                <div className="grid grid-cols-2 gap-2 mt-3">
-    {m.images.map((imgUrl, idx) => (
-      <img 
-        key={idx} 
-        src={imgUrl} 
-        alt="AI Proposal"
-        className="rounded-lg cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all border border-white/20 shadow-sm" 
-        // UPDATED LINE BELOW
-        onClick={() => generate3DModel(imgUrl, idx, m.proposalData)} 
-      />
-    ))}
-  </div>
-)}
+
+                {/* IMAGES GRID */}
+                {m.images && m.images.length > 0 && (
+                  <div className="grid grid-cols-1 gap-4 mt-4">
+                    {m.images.map((imgUrl, idx) => (
+                      <img
+                        key={idx}
+                        src={imgUrl}
+                        alt="Design Preview"
+                        className="w-full h-auto rounded-xl border-2 border-slate-200 cursor-pointer hover:border-blue-500 transition-all"
+                        onClick={() => generate3DModel(imgUrl, idx, m.proposalData)} 
+                      />
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
@@ -293,6 +273,7 @@ const handleSend = async () => {
           )}
         </div>
 
+        {/* CONTROLS OVERLAY */}
         <div className="absolute top-8 left-8 right-8 flex justify-between items-center pointer-events-none z-30">
           <div className="bg-white/80 backdrop-blur-md px-4 py-2 rounded-full border border-white shadow-sm flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
