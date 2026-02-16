@@ -73,23 +73,21 @@ export default function PedestalControls({ settings, setSettings, onPrepare }) {
         </div>
 
         {/* Text Input */}
-        <div>
-  <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Headline</label>
+       <div>
+  <label className="text-[10px] font-black text-slate-500 uppercase block mb-2">Headline</label>
   <input 
     type="text" 
-    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm mb-3"
-    value={settings.textLine1} 
+    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm mb-4"
+    value={settings.textLine1 || ""} 
     onChange={(e) => setSettings({...settings, textLine1: e.target.value})} 
-    placeholder="e.g. Happy Birthday!"
   />
   
-  <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">Signature</label>
+  <label className="text-[10px] font-black text-slate-500 uppercase block mb-2">Signature</label>
   <input 
     type="text" 
-    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-4 text-sm"
-    value={settings.textLine2} 
+    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-sm"
+    value={settings.textLine2 || ""} 
     onChange={(e) => setSettings({...settings, textLine2: e.target.value})} 
-    placeholder="e.g. Love, Sarah 2024"
   />
 </div>
 

@@ -92,6 +92,7 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   font="/fonts/Inter-Bold.woff" // You can specify local fonts
   color="#1e293b"
   anchorX="center"
+font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.woff"
 >
   {pedestalSettings.textLine1}
 </Text>
