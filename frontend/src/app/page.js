@@ -109,25 +109,30 @@ export default function Home() {
   };
 
   const generate3DModel = async (imageUrl, index, proposalData) => {
-    setLoading(true);
-    setStatus('Starting 3D Generation...');
+  setLoading(true);
+  setStatus('Starting 3D Generation...');
 
-    // 1. Parallel Headline Generation (Don't wait for it)
-    if (proposalData && proposalData[index]) {
-      const idea = proposalData[index];
-      // Fire and forget: this runs in the background
-axios.post(`${API_BASE}/chat`, {
-    type: 'GET_HEADLINES',
-    name: proposalData[index].name,
-    visual: proposalData[index].visual
-  }).then(res => {
+  // Set initial labels from proposal data if they exist
+  if (proposalData && proposalData[index]) {
     setPedestalSettings(prev => ({
       ...prev,
-      textLine1: res.data.headline,
-      textLine2: res.data.signature
+      textLine1: proposalData[index].engravingHeadline || "",
+      textLine2: proposalData[index].engravingSignature || ""
     }));
-  }).catch(err => console.error("Headline background fetch failed", err));
-    }
+
+    // NEW UPDATED FETCH: Refines headlines based on the specific selected idea
+    axios.post(`${API_BASE}/chat`, {
+      type: 'GET_HEADLINES',
+      name: proposalData[index].name,
+      visual: proposalData[index].visual
+    }).then(res => {
+      setPedestalSettings(prev => ({
+        ...prev,
+        textLine1: res.data.headline,
+        textLine2: res.data.signature
+      }));
+    }).catch(err => console.error("Headline background fetch failed", err));
+  }
 
     // 2. 3D Generation (The main thread)
     try {
