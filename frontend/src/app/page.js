@@ -74,32 +74,37 @@ export default function Home() {
           images: [] 
         }]);
 
-        const generatedImages = [];
-        for (let i = 0; i < ideas.length; i++) {
-          setStatus(`Generating preview ${i + 1}/3...`);
-          
-          const imgRes = await axios.post(`${API_BASE}/chat`, {
-            type: 'GEN_IMAGE',
-            visual: ideas[i].visual,
-            name: ideas[i].name,
-            index: i
-          });
+       const generatedImages = [];
+for (let i = 0; i < ideas.length; i++) {
+  setStatus(`Generating preview ${i + 1}/3...`);
+  
+  try {
+    const imgRes = await axios.post(`${API_BASE}/chat`, {
+      type: 'GEN_IMAGE',
+      visual: ideas[i].visual,
+      name: ideas[i].name,
+      index: i
+    });
 
-          if (imgRes.data.url) {
-            generatedImages.push(imgRes.data.url);
-            
-            setMessages(prev => {
-              const newMessages = [...prev];
-              const lastMsg = newMessages[newMessages.length - 1];
-              if (lastMsg.role === 'assistant') {
-                lastMsg.images = [...generatedImages];
-              }
-              return newMessages;
-            });
-          }
+    if (imgRes.data.url) {
+      generatedImages.push(imgRes.data.url);
+      
+      // We create a fresh array to force React to detect the change
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMsg = { ...newMessages[newMessages.length - 1] };
+        if (lastMsg.role === 'assistant') {
+          lastMsg.images = [...generatedImages]; // New reference
+          newMessages[newMessages.length - 1] = lastMsg;
         }
-      }
-    } catch (err) {
+        return newMessages;
+      });
+    }
+  } catch (e) {
+    console.error("Image gen failed for index", i, e);
+  }
+}
+ catch (err) {
       console.error("Chat Error:", err);
       setMessages(prev => [...prev, { role: 'assistant', content: "Error. Try again." }]);
     } finally {
