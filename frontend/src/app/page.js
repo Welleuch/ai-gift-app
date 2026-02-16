@@ -144,23 +144,29 @@ export default function Home() {
         });
 
         if (statusRes.data.status === 'COMPLETED' || statusRes.data.status === 'success') {
-    clearInterval(pollInterval);
-    
-    // Safety check: handle if output is a direct string or an object with mesh_url
-    const rawOutput = statusRes.data.output;
-    const finalUrl = (typeof rawOutput === 'object') ? rawOutput.mesh_url : rawOutput;
-    
-    if (finalUrl) {
-        setModelUrl(finalUrl);
-        setStatus('3D Model Loaded!');
-        setShowPedestalUI(true);
-        setLoading(false);
-    } else {
-        setStatus('Model URL missing from response');
-        setLoading(false);
-    }
-} catch (pollErr) {
+          clearInterval(pollInterval);
+          
+          // Use the logic discussed to handle nested or direct mesh URLs
+          const rawOutput = statusRes.data.output;
+          const finalUrl = (typeof rawOutput === 'object') ? rawOutput.mesh_url : rawOutput;
+          
+          if (finalUrl) {
+            setModelUrl(finalUrl);
+            setStatus('3D Model Loaded!');
+            setShowPedestalUI(true);
+            setLoading(false);
+          } else {
+            setStatus('Model URL missing from response');
+            setLoading(false);
+          }
+        } else if (statusRes.data.status === 'FAILED') {
+          clearInterval(pollInterval);
+          setStatus('Generation failed.');
+          setLoading(false);
+        }
+      } catch (pollErr) {
         console.error("Polling error:", pollErr);
+        // Optional: clear interval on persistent network errors
       }
     }, 3000);
   };
