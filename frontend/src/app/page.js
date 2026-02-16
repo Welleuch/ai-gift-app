@@ -49,143 +49,117 @@ export default function Home() {
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
- const handleSend = async () => {
-  if (!input.trim() || loading) return;
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
 
-  const userMsg = input;
-  setInput('');
-  setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-  setLoading(true);
-  setStatus('Brainstorming ideas...');
+    const userMsg = input;
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setLoading(true);
+    setStatus('Brainstorming ideas...');
 
-  try {
-    const chatRes = await axios.post(`${API_BASE}/chat`, {
-      type: 'CHAT',
-      message: userMsg
-    });
-
-    if (chatRes.data.ideas) {
-      const ideas = chatRes.data.ideas;
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: `I've designed 3 items for you! Generating previews...`,
-        images: [],
-        proposalData: ideas 
-      }]);
-
-      const generatedImages = [];
-      for (let i = 0; i < ideas.length; i++) {
-        setStatus(`Generating preview ${i + 1}/3...`);
-        
-        const imgRes = await axios.post(`${API_BASE}/chat`, {
-          type: 'GEN_IMAGE',
-          visual: ideas[i].visual,
-          name: ideas[i].name,
-          index: i
-        });
-
-        if (imgRes.data.url) {
-          generatedImages.push(imgRes.data.url);
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMsg = newMessages[newMessages.length - 1];
-            if (lastMsg.role === 'assistant') {
-              lastMsg.images = [...generatedImages];
-            }
-            return newMessages;
-          });
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Chat Error:", err);
-    setMessages(prev => [...prev, { role: 'assistant', content: "My creative engine stalled. Please try again!" }]);
-  } finally {
-    setLoading(false);
-    setStatus('');
-  }
-};
-
- // Add 'index' and 'proposalData' arguments to the function
-const generate3DModel = async (imageUrl, index, proposalData) => {
-  setLoading(true);
-  setStatus('Starting 3D Generation...');
-  
-  // NECESSARY CHANGE: Apply the AI-generated text to the 3D Pedestal immediately
-  if (proposalData && proposalData[index]) {
-    setPedestalSettings(prev => ({
-      ...prev,
-      textLine1: proposalData[index].engravingHeadline || "",
-      textLine2: proposalData[index].engravingSignature || ""
-    }));
-  }
-
-  try {
-    const res = await axios.post(`${API_BASE}/chat`, {
-      type: 'GEN_3D',
-      image_url: imageUrl
-    });
-
-    const data = res.data;
-    if (data.status === 'COMPLETED' || data.status === 'success') {
-      const meshUrl = data.output?.mesh_url || data.output; 
-      if (meshUrl && typeof meshUrl === 'string') {
-        setModelUrl(meshUrl);
-        setStatus("Model ready!");
-        setShowPedestalUI(true);
-        setLoading(false);
-        return;
-      }
-    }
-
-    if (data.jobId) {
-      pollStatus(data.jobId);
-    }
-  } catch (err) {
-    setStatus("3D Engine Busy. Try again.");
-    setLoading(false);
-  }
-};
-
-const pollStatus = async (jobId) => {
-  const check = async () => {
-   try {
-  const res = await axios.post(`${API_BASE}/chat`, {
-    type: 'GEN_3D',
-    image_url: imageUrl
-  });
-
-  let jobId = res.data.jobId;
-  setStatus('AI is sculpting your 3D model... (60s)');
-
-  // POLL FOR COMPLETION
-  const pollInterval = setInterval(async () => {
     try {
-      const statusRes = await axios.post(`${API_BASE}/chat`, {
-        type: 'CHECK_3D_STATUS',
-        jobId: jobId
+      const chatRes = await axios.post(`${API_BASE}/chat`, {
+        type: 'CHAT',
+        message: userMsg
       });
 
-      if (statusRes.data.status === 'COMPLETED' || statusRes.data.status === 'success') {
-        clearInterval(pollInterval);
-        setModelUrl(statusRes.data.output); // This is your mesh_url
-        setStatus('3D Model Loaded!');
-        setLoading(false);
-      } else if (statusRes.data.status === 'FAILED') {
-        clearInterval(pollInterval);
-        setStatus('Generation failed. Try again.');
+      if (chatRes.data.ideas) {
+        const ideas = chatRes.data.ideas;
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: `I've designed 3 items for you! Generating previews...`,
+          images: [],
+          proposalData: ideas 
+        }]);
+
+        const generatedImages = [];
+        for (let i = 0; i < ideas.length; i++) {
+          setStatus(`Generating preview ${i + 1}/3...`);
+          const imgRes = await axios.post(`${API_BASE}/chat`, {
+            type: 'GEN_IMAGE',
+            visual: ideas[i].visual,
+            name: ideas[i].name,
+            index: i
+          });
+
+          if (imgRes.data.url) {
+            generatedImages.push(imgRes.data.url);
+            setMessages(prev => {
+              const newMsgs = [...prev];
+              const last = newMsgs[newMsgs.length - 1];
+              if (last.role === 'assistant') last.images = [...generatedImages];
+              return newMsgs;
+            });
+          }
+        }
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', content: "My creative engine stalled. Please try again!" }]);
+    } finally {
+      setLoading(false);
+      setStatus('');
+    }
+  };
+
+  const generate3DModel = async (imageUrl, index, proposalData) => {
+    setLoading(true);
+    setStatus('Starting 3D Generation...');
+    
+    // THE HANDSHAKE: Set pedestal text from proposal data immediately
+    if (proposalData && proposalData[index]) {
+      setPedestalSettings(prev => ({
+        ...prev,
+        textLine1: proposalData[index].engravingHeadline || "",
+        textLine2: proposalData[index].engravingSignature || ""
+      }));
+    }
+
+    try {
+      const res = await axios.post(`${API_BASE}/chat`, {
+        type: 'GEN_3D',
+        image_url: imageUrl
+      });
+
+      if (res.data.jobId) {
+        pollStatus(res.data.jobId);
+      } else if (res.data.status === 'success' || res.data.status === 'COMPLETED') {
+        const mesh = res.data.output?.mesh_url || res.data.output;
+        setModelUrl(mesh);
         setLoading(false);
       }
-    } catch (pollErr) {
-      console.error("Polling error:", pollErr);
+    } catch (err) {
+      setStatus("3D Engine Busy. Try again.");
+      setLoading(false);
     }
-  }, 3000); // Check every 3 seconds
+  };
 
-} catch (error) {
-  setStatus('Error starting generation.');
-  setLoading(false);
-}
+  const pollStatus = (jobId) => {
+    setStatus('AI is sculpting your 3D model... (60s)');
+    const pollInterval = setInterval(async () => {
+      try {
+        const statusRes = await axios.post(`${API_BASE}/chat`, {
+          type: 'CHECK_3D_STATUS',
+          jobId: jobId
+        });
+
+        if (statusRes.data.status === 'COMPLETED' || statusRes.data.status === 'success') {
+          clearInterval(pollInterval);
+          const meshUrl = statusRes.data.output?.mesh_url || statusRes.data.output;
+          setModelUrl(meshUrl);
+          setStatus('3D Model Loaded!');
+          setShowPedestalUI(true);
+          setLoading(false);
+        } else if (statusRes.data.status === 'FAILED') {
+          clearInterval(pollInterval);
+          setStatus('Generation failed.');
+          setLoading(false);
+        }
+      } catch (pollErr) {
+        console.error("Polling error:", pollErr);
+      }
+    }, 3000);
+  };
 
   const handleDownloadSTL = async () => {
     if (!exporterRef.current) return;
@@ -197,7 +171,7 @@ const pollStatus = async (jobId) => {
       link.href = URL.createObjectURL(blob);
       link.download = `3d-gift-${Date.now()}.stl`;
       link.click();
-      setOrderSummary({ print_time: "4h 12m", weight: "42g", price: "$18.50" });
+      setOrderSummary({ print_time: "4h 12m", price: "$18.50" });
       setStatus("Design ready!");
     } catch (err) { setStatus("Export failed."); }
   };
@@ -206,7 +180,6 @@ const pollStatus = async (jobId) => {
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
-      {/* CHAT SIDEBAR */}
       <div className="w-[400px] flex flex-col bg-white border-r border-slate-200 shadow-xl z-20">
         <div className="p-6 border-b border-slate-100 bg-slate-900 text-white flex items-center gap-3">
           <div className="bg-blue-500 p-2 rounded-xl"><Sparkles size={20} /></div>
@@ -220,15 +193,13 @@ const pollStatus = async (jobId) => {
                 m.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none border border-slate-200'
               }`}>
                 {m.content}
-
-                {/* IMAGES GRID */}
                 {m.images && m.images.length > 0 && (
                   <div className="grid grid-cols-1 gap-4 mt-4">
                     {m.images.map((imgUrl, idx) => (
                       <img
                         key={idx}
                         src={imgUrl}
-                        alt="Design Preview"
+                        alt="Preview"
                         className="w-full h-auto rounded-xl border-2 border-slate-200 cursor-pointer hover:border-blue-500 transition-all"
                         onClick={() => generate3DModel(imgUrl, idx, m.proposalData)} 
                       />
@@ -254,7 +225,7 @@ const pollStatus = async (jobId) => {
               onChange={(e) => setInput(e.target.value)} 
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Describe your gift idea..." 
-              className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm focus:ring-4 focus:ring-blue-500/10 outline-none" 
+              className="w-full bg-white border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm outline-none focus:ring-2 focus:ring-blue-500" 
             />
             <button onClick={handleSend} disabled={loading} className="absolute right-2 p-3 bg-slate-900 text-white rounded-xl hover:bg-black disabled:opacity-50">
               <Send size={18} />
@@ -263,7 +234,6 @@ const pollStatus = async (jobId) => {
         </div>
       </div>
 
-      {/* 3D VIEWPORT */}
       <div className="flex-1 relative bg-slate-100 z-0">
         <div className="absolute inset-0 z-10 pointer-events-auto">
           {modelUrl ? (
@@ -276,7 +246,6 @@ const pollStatus = async (jobId) => {
           )}
         </div>
 
-        {/* CONTROLS OVERLAY */}
         <div className="absolute top-8 left-8 right-8 flex justify-between items-center pointer-events-none z-30">
           <div className="bg-white/80 backdrop-blur-md px-4 py-2 rounded-full border border-white shadow-sm flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
@@ -298,15 +267,13 @@ const pollStatus = async (jobId) => {
         <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end pointer-events-none z-30">
           <div className="pointer-events-auto">
             {orderSummary && (
-              <div className="bg-white/90 backdrop-blur-md p-6 rounded-[32px] shadow-2xl border border-white flex flex-col gap-1">
-                <div className="text-sm font-bold text-slate-800">
-                  Time: <span className="text-slate-500">{orderSummary.print_time}</span> • Price: <span className="text-green-600">{orderSummary.price}</span>
-                </div>
+              <div className="bg-white/90 backdrop-blur-md p-6 rounded-[32px] shadow-2xl border border-white flex flex-col gap-1 text-sm font-bold">
+                Time: {orderSummary.print_time} • Price: <span className="text-green-600">{orderSummary.price}</span>
               </div>
             )}
           </div>
           {modelUrl && (
-            <button onClick={handleDownloadSTL} className="pointer-events-auto bg-slate-900 text-white px-8 py-4 rounded-2xl text-sm font-black hover:bg-black shadow-2xl flex items-center gap-3">
+            <button onClick={handleDownloadSTL} className="pointer-events-auto bg-slate-900 text-white px-8 py-4 rounded-2xl text-sm font-black hover:bg-black flex items-center gap-3">
               <Download size={20} /> DOWNLOAD STL
             </button>
           )}
