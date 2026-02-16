@@ -86,7 +86,7 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
         </mesh>
         // Headline (Line 1) - Bold/Script feel
 <Text 
-  position={[0, h / 2 + 0.02, d / 4 - 0.1]} // Positioned slightly higher
+  position={[0, h / 2 + 0.02, d / 4 - 0.1]} 
   rotation={[-Math.PI / 2, 0, 0]}
   fontSize={0.25} 
   color="#1e293b"
@@ -97,7 +97,7 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
 
 // Signature (Line 2) - Clean/Smaller
 <Text 
-  position={[0, h / 2 + 0.02, d / 4 + 0.2]} // Positioned below line 1
+ position={[0, h / 2 + 0.02, d / 4 + 0.2]} 
   rotation={[-Math.PI / 2, 0, 0]}
   fontSize={0.15}
   color="#475569"

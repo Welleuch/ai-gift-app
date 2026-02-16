@@ -144,18 +144,22 @@ export default function Home() {
         });
 
         if (statusRes.data.status === 'COMPLETED' || statusRes.data.status === 'success') {
-          clearInterval(pollInterval);
-          const meshUrl = statusRes.data.output?.mesh_url || statusRes.data.output;
-          setModelUrl(meshUrl);
-          setStatus('3D Model Loaded!');
-          setShowPedestalUI(true);
-          setLoading(false);
-        } else if (statusRes.data.status === 'FAILED') {
-          clearInterval(pollInterval);
-          setStatus('Generation failed.');
-          setLoading(false);
-        }
-      } catch (pollErr) {
+    clearInterval(pollInterval);
+    
+    // Safety check: handle if output is a direct string or an object with mesh_url
+    const rawOutput = statusRes.data.output;
+    const finalUrl = (typeof rawOutput === 'object') ? rawOutput.mesh_url : rawOutput;
+    
+    if (finalUrl) {
+        setModelUrl(finalUrl);
+        setStatus('3D Model Loaded!');
+        setShowPedestalUI(true);
+        setLoading(false);
+    } else {
+        setStatus('Model URL missing from response');
+        setLoading(false);
+    }
+} catch (pollErr) {
         console.error("Polling error:", pollErr);
       }
     }, 3000);
