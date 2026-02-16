@@ -71,7 +71,7 @@ export default function Home() {
         role: 'assistant', 
         content: `I've designed 3 items for you! Generating previews...`,
         images: [],
-        proposalData: ideas // <--- NECESSARY CHANGE: Store the raw data here
+        proposalData: ideas 
       }]);
 
       const generatedImages = [];
@@ -150,37 +150,42 @@ const generate3DModel = async (imageUrl, index, proposalData) => {
 
 const pollStatus = async (jobId) => {
   const check = async () => {
+   try {
+  const res = await axios.post(`${API_BASE}/chat`, {
+    type: 'GEN_3D',
+    image_url: imageUrl
+  });
+
+  let jobId = res.data.jobId;
+  setStatus('AI is sculpting your 3D model... (60s)');
+
+  // POLL FOR COMPLETION
+  const pollInterval = setInterval(async () => {
     try {
-      const res = await axios.post(`${API_BASE}/chat`, {
+      const statusRes = await axios.post(`${API_BASE}/chat`, {
         type: 'CHECK_3D_STATUS',
         jobId: jobId
       });
 
-      const data = res.data;
-
-      if (data.status === 'COMPLETED' || data.status === 'success') {
-        // FIX: Extract from nested output
-        const meshUrl = data.output?.mesh_url || data.output; 
-        
-        if (meshUrl && typeof meshUrl === 'string') {
-          setModelUrl(meshUrl);
-          setStatus("Model ready!");
-          setShowPedestalUI(true);
-          setLoading(false);
-        }
-      } else if (data.status === 'FAILED') {
-        setStatus("Generation failed.");
+      if (statusRes.data.status === 'COMPLETED' || statusRes.data.status === 'success') {
+        clearInterval(pollInterval);
+        setModelUrl(statusRes.data.output); // This is your mesh_url
+        setStatus('3D Model Loaded!');
         setLoading(false);
-      } else {
-        setStatus(`Local PC Processing...`);
-        setTimeout(check, 3000); 
+      } else if (statusRes.data.status === 'FAILED') {
+        clearInterval(pollInterval);
+        setStatus('Generation failed. Try again.');
+        setLoading(false);
       }
-    } catch (e) {
-      setTimeout(check, 4000);
+    } catch (pollErr) {
+      console.error("Polling error:", pollErr);
     }
-  };
-  check();
-};
+  }, 3000); // Check every 3 seconds
+
+} catch (error) {
+  setStatus('Error starting generation.');
+  setLoading(false);
+}
 
   const handleDownloadSTL = async () => {
     if (!exporterRef.current) return;
