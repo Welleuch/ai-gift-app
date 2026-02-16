@@ -89,7 +89,6 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   position={[0, h / 2 + 0.02, d / 4 - 0.1]} // Positioned slightly higher
   rotation={[-Math.PI / 2, 0, 0]}
   fontSize={0.25} 
-  font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.woff"
   color="#1e293b"
   anchorX="center"
 >
@@ -101,7 +100,6 @@ const Model = forwardRef(({ url, pedestalSettings, setSettings }, ref) => {
   position={[0, h / 2 + 0.02, d / 4 + 0.2]} // Positioned below line 1
   rotation={[-Math.PI / 2, 0, 0]}
   fontSize={0.15}
-font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxKKTU1Kg.woff" 
   color="#475569"
   anchorX="center"
 >

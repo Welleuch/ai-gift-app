@@ -49,160 +49,138 @@ export default function Home() {
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+ const handleSend = async () => {
+  if (!input.trim() || loading) return;
 
-    const userMsg = input;
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setLoading(true);
-    setStatus('Brainstorming ideas...');
+  const userMsg = input;
+  setInput('');
+  setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+  setLoading(true);
+  setStatus('Brainstorming ideas...');
 
-    try {
-      const chatRes = await axios.post(`${API_BASE}/chat`, {
-        type: 'CHAT',
-        message: userMsg 
-      });
+  try {
+    const chatRes = await axios.post(`${API_BASE}/chat`, {
+      type: 'CHAT',
+      message: userMsg
+    });
 
-      if (chatRes.data.status === "success" && chatRes.data.ideas) {
-        const ideas = chatRes.data.ideas;
+    if (chatRes.data.ideas) {
+      const ideas = chatRes.data.ideas;
+      
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: `I've designed 3 items for you! Generating previews...`,
+        images: [],
+        proposalData: ideas // <--- NECESSARY CHANGE: Store the raw data here
+      }]);
+
+      const generatedImages = [];
+      for (let i = 0; i < ideas.length; i++) {
+        setStatus(`Generating preview ${i + 1}/3...`);
         
-        setMessages(prev => [...prev, { 
-          role: 'assistant', 
-          content: "I've come up with 3 designs. Generating previews now...",
-          proposalData: ideas,
-          images: [] 
-        }]);
+        const imgRes = await axios.post(`${API_BASE}/chat`, {
+          type: 'GEN_IMAGE',
+          visual: ideas[i].visual,
+          name: ideas[i].name,
+          index: i
+        });
 
-        const generatedImages = [];
-        for (let i = 0; i < ideas.length; i++) {
-          setStatus(`Generating preview ${i + 1}/3...`);
-          
-          try {
-            const imgRes = await axios.post(`${API_BASE}/chat`, {
-              type: 'GEN_IMAGE',
-              visual: ideas[i].visual,
-              name: ideas[i].name,
-              index: i
-            });
-
-            if (imgRes.data.url) {
-              generatedImages.push(imgRes.data.url);
-              
-              setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMsg = { ...newMessages[newMessages.length - 1] };
-                if (lastMsg.role === 'assistant') {
-                  lastMsg.images = [...generatedImages];
-                  newMessages[newMessages.length - 1] = lastMsg;
-                }
-                return newMessages;
-              });
+        if (imgRes.data.url) {
+          generatedImages.push(imgRes.data.url);
+          setMessages(prev => {
+            const newMessages = [...prev];
+            const lastMsg = newMessages[newMessages.length - 1];
+            if (lastMsg.role === 'assistant') {
+              lastMsg.images = [...generatedImages];
             }
-          } catch (e) {
-            console.error("Image gen failed for index", i, e);
-          }
+            return newMessages;
+          });
         }
-      } // <--- Added this missing brace to close 'if (chatRes.data.status === "success" ...)'
-    } catch (err) { // <--- This catch now correctly corresponds to the main try block
-      console.error("Chat Error:", err);
-      setMessages(prev => [...prev, { role: 'assistant', content: "Error. Try again." }]);
-    } finally {
-      setLoading(false);
-      setStatus('');
+      }
     }
-  };
+  } catch (err) {
+    console.error("Chat Error:", err);
+    setMessages(prev => [...prev, { role: 'assistant', content: "My creative engine stalled. Please try again!" }]);
+  } finally {
+    setLoading(false);
+    setStatus('');
+  }
+};
 
-  const generate3DModel = async (imageUrl, index, proposalData) => {
+ // Add 'index' and 'proposalData' arguments to the function
+const generate3DModel = async (imageUrl, index, proposalData) => {
   setLoading(true);
   setStatus('Starting 3D Generation...');
-
-  // Set initial labels from proposal data if they exist
+  
+  // NECESSARY CHANGE: Apply the AI-generated text to the 3D Pedestal immediately
   if (proposalData && proposalData[index]) {
     setPedestalSettings(prev => ({
       ...prev,
       textLine1: proposalData[index].engravingHeadline || "",
       textLine2: proposalData[index].engravingSignature || ""
     }));
-
-    // NEW UPDATED FETCH: Refines headlines based on the specific selected idea
-    axios.post(`${API_BASE}/chat`, {
-      type: 'GET_HEADLINES',
-      name: proposalData[index].name,
-      visual: proposalData[index].visual
-    }).then(res => {
-      setPedestalSettings(prev => ({
-        ...prev,
-        textLine1: res.data.headline,
-        textLine2: res.data.signature
-      }));
-    }).catch(err => console.error("Headline background fetch failed", err));
   }
 
-    // 2. 3D Generation (The main thread)
+  try {
+    const res = await axios.post(`${API_BASE}/chat`, {
+      type: 'GEN_3D',
+      image_url: imageUrl
+    });
+
+    const data = res.data;
+    if (data.status === 'COMPLETED' || data.status === 'success') {
+      const meshUrl = data.output?.mesh_url || data.output; 
+      if (meshUrl && typeof meshUrl === 'string') {
+        setModelUrl(meshUrl);
+        setStatus("Model ready!");
+        setShowPedestalUI(true);
+        setLoading(false);
+        return;
+      }
+    }
+
+    if (data.jobId) {
+      pollStatus(data.jobId);
+    }
+  } catch (err) {
+    setStatus("3D Engine Busy. Try again.");
+    setLoading(false);
+  }
+};
+
+const pollStatus = async (jobId) => {
+  const check = async () => {
     try {
       const res = await axios.post(`${API_BASE}/chat`, {
-        type: 'GEN_3D',
-        image_url: imageUrl
+        type: 'CHECK_3D_STATUS',
+        jobId: jobId
       });
 
       const data = res.data;
 
       if (data.status === 'COMPLETED' || data.status === 'success') {
-        const meshUrl = data.output;
+        // FIX: Extract from nested output
+        const meshUrl = data.output?.mesh_url || data.output; 
+        
         if (meshUrl && typeof meshUrl === 'string') {
           setModelUrl(meshUrl);
           setStatus("Model ready!");
           setShowPedestalUI(true);
           setLoading(false);
-          return; 
         }
-      }
-
-      if (data.jobId) {
-        pollStatus(data.jobId);
+      } else if (data.status === 'FAILED') {
+        setStatus("Generation failed.");
+        setLoading(false);
       } else {
-        throw new Error(data.error || "Failed to start job");
+        setStatus(`Local PC Processing...`);
+        setTimeout(check, 3000); 
       }
-    } catch (err) {
-      console.error("3D Start Error:", err);
-      setStatus("3D Engine Busy. Try again.");
-      setLoading(false);
+    } catch (e) {
+      setTimeout(check, 4000);
     }
   };
-
-  const pollStatus = async (jobId) => {
-    const check = async () => {
-      try {
-        const res = await axios.post(`${API_BASE}/chat`, {
-          type: 'CHECK_3D_STATUS',
-          jobId: jobId
-        });
-
-        const data = res.data;
-
-        if (data.status === 'COMPLETED' || data.status === 'success') {
-  const meshUrl = data.output?.mesh_url || data.output; // Updated this line
-  if (meshUrl && typeof meshUrl === 'string') {
-    setModelUrl(meshUrl);
-    setStatus("Model ready!");
-    setShowPedestalUI(true);
-    setLoading(false);
-  }
-} else if (data.status === 'FAILED') {
-          setStatus("Generation failed.");
-          setLoading(false);
-        } else {
-          setStatus(`Local PC Processing...`);
-          setTimeout(check, 3000); 
-        }
-      } catch (e) {
-        console.error("Polling error:", e);
-        setTimeout(check, 4000);
-      }
-    };
-    check();
-  };
+  check();
+};
 
   const handleDownloadSTL = async () => {
     if (!exporterRef.current) return;
