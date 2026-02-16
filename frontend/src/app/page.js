@@ -182,14 +182,14 @@ export default function Home() {
         const data = res.data;
 
         if (data.status === 'COMPLETED' || data.status === 'success') {
-          const meshUrl = data.output; 
-          if (meshUrl && typeof meshUrl === 'string') {
-            setModelUrl(meshUrl);
-            setStatus("Model ready!");
-            setShowPedestalUI(true);
-            setLoading(false);
-          }
-        } else if (data.status === 'FAILED') {
+  const meshUrl = data.output?.mesh_url || data.output; // Updated this line
+  if (meshUrl && typeof meshUrl === 'string') {
+    setModelUrl(meshUrl);
+    setStatus("Model ready!");
+    setShowPedestalUI(true);
+    setLoading(false);
+  }
+} else if (data.status === 'FAILED') {
           setStatus("Generation failed.");
           setLoading(false);
         } else {
