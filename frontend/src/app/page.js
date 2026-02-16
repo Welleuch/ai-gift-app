@@ -116,19 +116,17 @@ export default function Home() {
     if (proposalData && proposalData[index]) {
       const idea = proposalData[index];
       // Fire and forget: this runs in the background
-      axios.post(`${API_BASE}/chat`, {
-        type: 'GET_HEADLINES',
-        name: idea.name,
-        visual: idea.visual
-      }).then(res => {
-        if (res.data.headline) {
-          setPedestalSettings(prev => ({
-            ...prev,
-            textLine1: res.data.headline,
-            textLine2: res.data.signature
-          }));
-        }
-      }).catch(err => console.error("Headline background fetch failed", err));
+axios.post(`${API_BASE}/chat`, {
+    type: 'GET_HEADLINES',
+    name: proposalData[index].name,
+    visual: proposalData[index].visual
+  }).then(res => {
+    setPedestalSettings(prev => ({
+      ...prev,
+      textLine1: res.data.headline,
+      textLine2: res.data.signature
+    }));
+  }).catch(err => console.error("Headline background fetch failed", err));
     }
 
     // 2. 3D Generation (The main thread)
